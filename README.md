@@ -1,7 +1,7 @@
 WiFi-Dipcortex
 ===============================
 
-Codebase for the WiFi DipCortex and SolderBridge development boards
+Codebase for the WiFi DipCortex
 
 Not Ready just yet!
 
