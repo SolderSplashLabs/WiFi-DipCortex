@@ -82,6 +82,9 @@
 #include "power_api.h"
 #include "mw_usbd_rom_api.h"
 
+#include "usbcdc_fifo.h"
+#include "usbcdc.h"
+
 //#define UART_BRIDGE 0
 
 bool UsbConnected = false;
@@ -179,16 +182,17 @@ ErrorCode_t VCOM_sof_event(USBD_HANDLE_T hUsb)
 
 // ------------------------------------------------------------------------------------------------------------
 /*!
-    @brief UsbCdc_TriggerTx, this will
+    @brief UsbCdc_TriggerTx
 */
 // ------------------------------------------------------------------------------------------------------------
 void UsbCdc_TriggerTx ( void )
 {
+	/*
 uint8_t bufferSize = 0;
 
 	// TODO : for now we use the constant interrupt method as it's more reliable
 
-	/*
+
 	if ( UsbConnected )
 	{
 		bufferSize = UsbCdcTxFifo_CopyTo(g_vCOM.txBuf, USB_HS_MAX_BULK_PACKET);
@@ -329,7 +333,7 @@ uint8_t dummy=0;
     @brief UsbCdcInit
 */
 // ------------------------------------------------------------------------------------------------------------
-int UsbCdcInit (void)
+void UsbCdcInit (void)
 {
   USBD_API_INIT_PARAM_T usb_param;
   USBD_CDC_INIT_PARAM_T cdc_param;

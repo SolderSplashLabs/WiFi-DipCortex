@@ -56,3 +56,63 @@ extern unsigned char wlan_tx_buffer[];
 /* SSP0 Interrupt clear register */
 #define SSPICR_RORIC    (0x1<<0)
 #define SSPICR_RTIC     (0x1<<1)
+
+void SpiInit ( void );
+void SpiClose(void);
+void SpiOpen (gcSpiHandleRx pfRxHandler);
+void SpiResumeSpi (void);
+long SpiWrite (unsigned char *pUserBuffer, unsigned short usLength);
+
+
+
+#define READ                    			3
+#define WRITE                   			1
+
+#define HI(value)               			(((value) & 0xFF00) >> 8)
+#define LO(value)               			((value) & 0x00FF)
+
+#define SPI_HEADER_SIZE						(5)
+#define HEADERS_SIZE_EVNT       			(SPI_HEADER_SIZE + 5)
+
+#define eSPI_STATE_POWERUP 				 	(0)
+#define eSPI_STATE_INITIALIZED  		 	(1)
+#define eSPI_STATE_IDLE					 	(2)
+#define eSPI_STATE_WRITE_IRQ	   		 	(3)
+#define eSPI_STATE_WRITE_FIRST_PORTION   	(4)
+#define eSPI_STATE_WRITE_EOT			 	(5)
+#define eSPI_STATE_READ_IRQ				 	(6)
+#define eSPI_STATE_READ_FIRST_PORTION	 	(7)
+#define eSPI_STATE_READ_EOT				 	(8)
+
+// The magic number that resides at the end of the TX/RX buffer (1 byte after the allocated size)
+// for the purpose of detection of the overrun. The location of the memory where the magic number
+// resides shall never be written. In case it is written - the overrun occured and either recevie function
+// or send function will stuck forever.
+#define CC3000_BUFFER_MAGIC_NUMBER 			(0xDE)
+
+
+#ifdef _SPI_
+
+typedef struct
+{
+	gcSpiHandleRx  SPIRxHandler;
+
+	unsigned short usTxPacketLength;
+	unsigned short usRxPacketLength;
+	unsigned long  ulSpiState;
+	unsigned char *pTxPacket;
+	unsigned char *pRxPacket;
+
+}tSpiInformation;
+
+tSpiInformation sSpiInformation;
+
+char spi_buffer[CC3000_RX_BUFFER_SIZE];
+unsigned char wlan_tx_buffer[CC3000_TX_BUFFER_SIZE];
+
+//
+// Static buffer for 5 bytes of SPI HEADER
+//
+unsigned char tSpiReadHeader[] = {READ, 0, 0, 0, 0};
+
+#endif

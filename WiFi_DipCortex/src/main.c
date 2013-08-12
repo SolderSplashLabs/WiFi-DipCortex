@@ -48,11 +48,17 @@
 
 #include "SolderSplashLpc.h"
 
+#include "time.h"
 #include "usb\usbcdc_fifo.h"
 #include "console.h"
 #include "cli.h"
+#include "cc3000_headers.h"
+#include "systemConfig.h"
 #include "wifi_app.h"
 #include "usbcdc.h"
+#include "SolderSplashUdp.h"
+#include "sntpClient.h"
+
 
 #define _MAIN_
 #include "main.h"
@@ -65,6 +71,7 @@
 void SysTick_Handler(void)
 {
 	sysTicked = true;
+	Time_Task();
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -96,17 +103,21 @@ void init(void)
 	// Enable AHB clock to the GPIO domain.
 	LPC_SYSCON->SYSAHBCLKCTRL |= (1<<6);
 
-	// Enable AHB clock to the PinInt, GroupedInt domain.
-	LPC_SYSCON->SYSAHBCLKCTRL |= ((1<<19) | (1<<23) | (1<<24));
+	// Enable AHB clock to the PinInt, GroupedInt domain and RAM1
+	LPC_SYSCON->SYSAHBCLKCTRL |= ((1<<19) | (1<<23) | (1<<24) | (1<<26));
 
 	LpcLowPowerIoInit();
 
 	LED1_INIT;
 
+	SysConfig_Init();
+
 	CLI_Init();
 
 	// Start USB CDC Console
 	UsbCdcInit();
+
+	SntpInit();
 
 	Wifi_AppInit(0);
 }
@@ -118,19 +129,23 @@ void init(void)
 // ------------------------------------------------------------------------------------------------------------
 int main(void)
 {
-	init();
+ 	init();
 
 	// Set up the System Tick for a 1ms interrupt
-	SysTick_Config(SystemCoreClock / 1000);
+	SysTick_Config(SYSTICK);
 
 	while(1)
 	{
 		if ( sysTicked )
 		{
 			sysTicked = false;
+
+			Wifi_Task();
+			SntpTask();
 			Console_Task();
+			SSUDP_Task();
 		}
- 	}
+  	}
 
 	return 0;
 }

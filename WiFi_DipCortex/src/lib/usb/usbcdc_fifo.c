@@ -47,6 +47,7 @@
 */
 
 #include "SolderSplashLpc.h"
+#include "usbcdc.h"
 
 #define _USB_CDC_FIFO_
 #include "usbcdc_fifo.h"
@@ -102,7 +103,7 @@ uint16_t result = 0;
     @brief UsbCdcFifo_GetByte -
 */
 // ------------------------------------------------------------------------------------------------------------
-bool UsbCdcTxFifo_GetByte ( uint8_t *data )
+bool UsbCdcTxFifo_GetChar ( char *data )
 {
 	if ( CdcFifoTXTail != CdcFifoTxHead )
 	{
@@ -121,7 +122,7 @@ bool UsbCdcTxFifo_GetByte ( uint8_t *data )
     @brief UsbCdcFifo_GetByte -
 */
 // ------------------------------------------------------------------------------------------------------------
-bool UsbCdcRxFifo_GetByte ( uint8_t *data )
+bool UsbCdcRxFifo_GetChar ( char *data )
 {
 	if ( CdcFifoRXTail != CdcFifoRxHead )
 	{
@@ -162,7 +163,7 @@ uint16_t result = 0;
     TODO : Handle the fifo filling up
 */
 // ------------------------------------------------------------------------------------------------------------
-uint16_t UsbCdcTxFifo_AddBytes ( uint8_t *data, uint16_t len )
+uint16_t UsbCdcTxFifo_AddBytes ( char *data, uint16_t len )
 {
 uint16_t i = 0;
 uint16_t result = 0;
@@ -204,7 +205,7 @@ uint16_t result = 0;
     TODO : Handle the fifo filling up
 */
 // ------------------------------------------------------------------------------------------------------------
-uint16_t UsbCdcRxFifo_AddBytes ( uint8_t *data, uint16_t len )
+uint16_t UsbCdcRxFifo_AddBytes ( char *data, uint16_t len )
 {
 	uint16_t i = 0;
 	uint16_t result = 0;

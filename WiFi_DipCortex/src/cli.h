@@ -58,6 +58,9 @@ int CLI_CC3000_Patch (int argc, char **argv);
 int CLI_Resolve (int argc, char **argv);
 int CLI_Http (int argc, char **argv);
 int CLI_9Dof (int argc, char **argv);
+int CLI_Ping (int argc, char **argv);
+int CLI_Time (int argc, char **argv);
+int CLI_Gpio (int argc, char **argv);
 
 #ifdef _CLI_
 
@@ -76,6 +79,9 @@ const CONSOLE_CMDS_STRUCT ConsoleCommands[] =
 	{"resolve",				CLI_Resolve,			"Resolve a hostname to an IP"},
 	{"http",				CLI_Http,				"http post"},
 	{"9dof",				CLI_9Dof,				"Read the 9DOF"},
+	{"ping",				CLI_Ping,				"Ping"},
+	{"time",				CLI_Time,				"Get/Set Time"},
+	{"gpio",				CLI_Gpio,				"Control GPIO"},
 	{0,0}
 };
 
@@ -104,7 +110,7 @@ char *HCI_EVENT_STR[] =
 char *HCI_NETAPP_STR[] =
 {
 	"DHCP",
-	"Ping Send",
+	"Ping Sent",
 	"Ping Report",
 	"Ping Stop",
 	"IP Config",
@@ -112,6 +118,25 @@ char *HCI_NETAPP_STR[] =
 	"Unknown",
 	"Set Debug level",
 	"Set Timers"
+};
+
+// from 0-7
+char *HCI_MISC_STR[] =
+{
+	"BASE - Error?",
+	"Connecting",
+	"Disconnect",
+	"Scan Param",
+	"Connect Policy",
+	"Add Profile",
+	"Del Profile",
+	"Get Scan Res",
+	"Event Mask",
+	"Status Req",
+	"Config Start",
+	"Config Stop",
+	"Config Set Prefix",
+	"Config Patch",
 };
 
 /*

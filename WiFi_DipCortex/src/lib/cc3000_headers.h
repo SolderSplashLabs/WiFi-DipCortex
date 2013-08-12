@@ -1,6 +1,8 @@
+#include ".\cc3000\cc3000_common.h"
 #include ".\cc3000\wlan.h"
 #include ".\cc3000\evnt_handler.h"
 #include ".\cc3000\nvmem.h"
 #include ".\cc3000\socket.h"
 #include ".\cc3000\netapp.h"
 #include ".\cc3000\spi.h"
+#include ".\cc3000\socket.h"

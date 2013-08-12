@@ -38,6 +38,7 @@
 //******************************************************************************
 // Include files
 //******************************************************************************
+#include <string.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <stdint.h>
@@ -102,7 +103,7 @@ extern "C" {
   therfore maximum key size is 13)
 */
 
-#define CC3000_MINIMAL_RX_SIZE      (130 + 1)
+#define CC3000_MINIMAL_RX_SIZE      (1519 + 1)
 #define CC3000_MAXIMAL_RX_SIZE      (1519 + 1)
 
 /*Defines for minimal and maximal TX buffer size.
@@ -124,7 +125,7 @@ extern "C" {
  
   The 1 is used for the overrun detection */ 
 
-#define	CC3000_MINIMAL_TX_SIZE      (130 + 1)  
+#define	CC3000_MINIMAL_TX_SIZE      (1519 + 1)
 #define	CC3000_MAXIMAL_TX_SIZE      (1519 + 1)
 
 //TX and RX buffer sizes, allow to receive and transmit maximum data at length 8.
@@ -157,8 +158,16 @@ extern "C" {
 //*****************************************************************************
 //                  Compound Types
 //*****************************************************************************
-typedef long time_t;
-typedef unsigned long clock_t;
+#ifndef time_t
+//typedef long time_t;
+typedef unsigned int time_t;
+#endif
+
+#ifndef clock_t
+//typedef unsigned long clock_t;
+typedef unsigned int clock_t;
+#endif
+
 typedef long suseconds_t;
 
 typedef struct timeval timeval;

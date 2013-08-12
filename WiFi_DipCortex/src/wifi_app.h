@@ -3,8 +3,16 @@
 #define WLAN_EN_PIN_MASK	1<<WLAN_EN_PIN_NO
 #define WLAN_EN_PORT		1
 
+#define DISABLE                                                 (0)
+#define ENABLE                                                  (1)
+#define CC3000_UNENCRYPTED_SMART_CONFIG
 
+void Wifi_Task ( void );
 void Wifi_AppInit ( uint8_t initType );
+bool Wifi_IsConnected ( void );
+
+tNetappIpconfigRetArgs * getCC3000Info( bool getCached );
+
 void CC3000_UsynchCallback(long lEventType, char * data, unsigned char length);
 
 char *sendWLFWPatch(unsigned long *Length);
@@ -14,8 +22,31 @@ void WlanInterruptEnable();
 void WlanInterruptDisable();
 long ReadWlanInterruptPin(void);
 void WriteWlanPin( unsigned char val );
+bool ReadParameters ( void );
+void Wifi_GetScanResults ( void );
+void Wifi_SendPing ( uint32_t ip, uint32_t attempts, uint32_t packetsize, uint32_t timeout);
+void Wifi_StartScan ( uint32_t millseconds );
+void StartSmartConfig(void);
+
+typedef struct Result_Struct
+{
+  uint32_t  num_networks;
+  uint32_t  scan_status;
+  uint8_t   rssiByte;
+  uint8_t   Sec_ssidLen;
+  uint16_t  time;
+  uint8_t   ssid_name[32];
+  uint8_t   bssid[6];
+} ResultStruct_t;
+
 
 #ifdef _WIFI_APP_
+
+//   0 - Open, 1 - WEP, 2 WPA, 3 WPA2
+const char * WIFI_SEC_TYPE[] = {"Open", "WEP", "WPA", "WPA2"};
+
+bool IpConfRequested = false;
+bool IpConfDataCached = false;
 
 const unsigned long WIFI_DHCP_TIMEOUT			=	86400;
 const unsigned long WIFI_ARP_TIMEOUT			=	3600;
@@ -31,6 +62,10 @@ volatile unsigned long ulSmartConfigFinished, ulCC3000Connected,ulCC3000DHCP,OkT
 volatile uint8_t cMacFromEeprom[MAC_ADDR_LEN];
 bool ParametersRead = false;
 uint8_t cRMParamsFromEeprom[128];						// This array holds the CC3000's eeprom parameters
+
+netapp_pingreport_args_t *WifiPingReport;
+
+tNetappIpconfigRetArgs ipinfo;
 
 #else
 

@@ -1,3 +1,51 @@
+/*
+  ____        _     _           ____        _           _		 _          _
+ / ___|  ___ | | __| | ___ _ __/ ___| _ __ | | __ _ ___| |__	| |    __ _| |__  ___
+ \___ \ / _ \| |/ _` |/ _ \ '__\___ \| '_ \| |/ _` / __| '_ \	| |   / _` | '_ \/ __|
+  ___) | (_) | | (_| |  __/ |   ___) | |_) | | (_| \__ \ | | |	| |__| (_| | |_) \__ \
+ |____/ \___/|_|\__,_|\___|_|  |____/| .__/|_|\__,_|___/_| |_|	|_____\__,_|_.__/|___/
+                                     |_|
+ (C)SolderSplash Labs 2013 - www.soldersplash.co.uk - C. Matthews - R. Steel
+
+
+	@file     console.c
+	@author   Carl Matthews (soldersplash.co.uk)
+	@date     03 July 2013
+
+    @section LICENSE
+
+	Software License Agreement (BSD License)
+
+    Copyright (c) 2013, C. Matthews - R. Steel (soldersplash.co.uk)
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions are met:
+    1. Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+    2. Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+    3. Neither the name of the copyright holders nor the
+    names of its contributors may be used to endorse or promote products
+    derived from this software without specific prior written permission.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ''AS IS'' AND ANY
+    EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+    WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+    DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY
+    DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+    (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+    LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+    ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+    (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+    @section DESCRIPTION
+
+
+*/
+
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -28,13 +76,13 @@ void Console_DataIn ( void )
 {
 uint8_t i = 0;
 bool processBuffer = false;
-uint8_t newChar;
+char newChar;
 static uint8_t escapeCmdCharCnt = 0;
 static bool firstTime = TRUE;
 
 	if (! actioningCommand)
 	{
-		while ( UsbCdcRxFifo_GetByte(&newChar) )
+		while ( UsbCdcRxFifo_GetChar(&newChar) )
 		{
 			// Really really basic escape code processing to catch the arrow keys
 			if ( escapeCmdCharCnt )
@@ -64,7 +112,7 @@ static bool firstTime = TRUE;
 								ConsoleCurBuf = 1;
 							}
 
-							UsbCdcTxFifo_AddBytes(CONSOLE_CLEARLINE, sizeof(CONSOLE_CLEARLINE));
+							UsbCdcTxFifo_AddBytes((char *)CONSOLE_CLEARLINE, sizeof(CONSOLE_CLEARLINE));
 							UsbCdcTxFifo_AddBytes("\r>",2);
 
 						}
@@ -80,7 +128,7 @@ static bool firstTime = TRUE;
 								ConsoleCurBuf = 1;
 							}
 
-							UsbCdcTxFifo_AddBytes(CONSOLE_CLEARLINE, sizeof(CONSOLE_CLEARLINE));
+							UsbCdcTxFifo_AddBytes((char *)CONSOLE_CLEARLINE, sizeof(CONSOLE_CLEARLINE));
 							UsbCdcTxFifo_AddBytes("\r>",2);
 						}
 						else if ('C' == newChar)
@@ -196,8 +244,7 @@ static bool firstTime = TRUE;
 // ------------------------------------------------------------------------------------------------------------
 void Console_Process ( void )
 {
-char outstring[50];
-uint8_t *buffer = ConsoleBuffer[ConsoleCurBuf];
+char *buffer = ConsoleBuffer[ConsoleCurBuf];
 bool nextCharIsParamStart = false;
 uint16_t i = 0;
 uint16_t argc = 0;
@@ -287,9 +334,7 @@ void Console_Init ( CONSOLE_CMDS_STRUCT *appCommandList )
 // ------------------------------------------------------------------------------------------------------------
 void ConsoleVPrintf(const char *format, va_list args)
 {
-char outstring[512];
-
-	vsnprintf(&outstring[0], 512, format, args);
+	vsnprintf(&outstring[0], sizeof(outstring), format, args);
 	UsbCdcTxFifo_AddBytes((uint8_t *)&outstring[0], strlen(outstring));
 }
 
@@ -307,18 +352,52 @@ va_list args;
 	va_start(args, format);
 
 	// clear line and move cursor to the start
-	UsbCdcTxFifo_AddBytes(CONSOLE_CLEARLINE, sizeof(CONSOLE_CLEARLINE));
+	UsbCdcTxFifo_AddBytes((char *)CONSOLE_CLEARLINE, sizeof(CONSOLE_CLEARLINE));
 
 	UsbCdcTxFifo_AddBytes("\r",1);
 
 	// attribute, fore, back
-	ConsolePrintf("\x1b[%d;%d;%dm", 2, 2 + 30, 0 + 40);
+	ConsolePrintf("\x1b[%d;%d;%dm", 2, CONSOLE_FORE_GREEN, CONSOLE_BACK_BLACK);
 
 	// Print the new data
 	ConsoleVPrintf(format, args);
 
-	// back to white on black - attribute, fore, back
-	ConsolePrintf("\x1b[%d;%d;%dm", 0, 37, 0 + 40);
+	ConsolePrintf("\x1b[%d;%d;%dm", 0, CONSOLE_FORE_WHITE, CONSOLE_BACK_BLACK);
+
+	// Now put back any data we cleared
+	UsbCdcTxFifo_AddBytes("\r\n>",3);
+	if ( ConsoleBufferPos )
+	{
+		ConsolePrintf(ConsoleBuffer[ConsoleCurBuf], args);
+	}
+
+	va_end(args);
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief ConsoleInsertPrintf - inserts this new line and then puts back any half entered data
+*/
+// ------------------------------------------------------------------------------------------------------------
+void ConsoleInsertDebugPrintf(const char *format, ...)
+{
+va_list args;
+
+	// get the var args
+	va_start(args, format);
+
+	// clear line and move cursor to the start
+	UsbCdcTxFifo_AddBytes((char *)CONSOLE_CLEARLINE, sizeof(CONSOLE_CLEARLINE));
+
+	UsbCdcTxFifo_AddBytes("\r",1);
+
+	// attribute, fore, back
+	ConsolePrintf("\x1b[%d;%d;%dm", 2, CONSOLE_FORE_CYAN, CONSOLE_BACK_BLACK);
+
+	// Print the new data
+	ConsoleVPrintf(format, args);
+
+	ConsolePrintf("\x1b[%d;%d;%dm", 0, CONSOLE_FORE_WHITE, CONSOLE_BACK_BLACK);
 
 	// Now put back any data we cleared
 	UsbCdcTxFifo_AddBytes("\r\n>",3);

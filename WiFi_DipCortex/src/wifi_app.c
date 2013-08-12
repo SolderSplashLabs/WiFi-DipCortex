@@ -47,14 +47,41 @@
 */
 
 #include "SolderSplashLpc.h"
-
+#include "main.h"
 #include "cc3000_headers.h"
 #include "usb\usbcdc_fifo.h"
 #include "lpc\gpio.h"
 #include "console.h"
+#include "delay.h"
+#include "cc3000\spi.h"
+#include "SystemConfig.h"
+
+#include "SolderSplashUdp.h"
 
 #define _WIFI_APP_
 #include "wifi_app.h"
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Wifi_Task
+*/
+// ------------------------------------------------------------------------------------------------------------
+void Wifi_Task ( void )
+{
+volatile tNetappIpconfigRetArgs *cc3000Status;
+
+	if (! IpConfRequested )
+	{
+		if (Wifi_IsConnected())
+		{
+			cc3000Status = getCC3000Info( false );
+			SntpUpdate( false );
+			SSUDP_Listen();
+
+			IpConfRequested = true;
+		}
+	}
+}
 
 // ------------------------------------------------------------------------------------------------------------
 /*!
@@ -63,6 +90,8 @@
 // ------------------------------------------------------------------------------------------------------------
 void Wifi_AppInit ( uint8_t initType )
 {
+unsigned long ipAddr = 0;
+
 	// SPI Init
 	SpiInit();
 
@@ -75,23 +104,52 @@ void Wifi_AppInit ( uint8_t initType )
 	// WLAN On API Implementation
 	wlan_init( CC3000_UsynchCallback, sendWLFWPatch, sendDriverPatch, sendBootLoaderPatch, ReadWlanInterruptPin, WlanInterruptEnable, WlanInterruptDisable, WriteWlanPin);
 
-	__WFI();
-	__WFI();
+	DelayUs(1000);
 
 	// Trigger a WLAN device, 0 = no patches, 1 = patches availible
 	wlan_start(initType);
 
 	wlan_smart_config_set_prefix((char*)aucCC3000_prefix);
+
+	if ( SystemConfig.flags.StaticIp )
+	{
+		netapp_dhcp(&SystemConfig.ulStaticIP, &SystemConfig.ulSubnetMask, &SystemConfig.ulGatewayIP, &SystemConfig.ulGatewayIP );
+	}
+	else
+	{
+		netapp_dhcp(&ipAddr, &ipAddr, &ipAddr, &ipAddr);
+	}
+
 	// Fast connect, use profiles
 	wlan_ioctl_set_connection_policy(0, 1, 1);
 
-	__WFI();
-	__WFI();
+	DelayUs(1000);
 
-	wlan_set_event_mask(HCI_EVNT_WLAN_KEEPALIVE|HCI_EVNT_WLAN_UNSOL_INIT|HCI_EVNT_WLAN_ASYNC_PING_REPORT);
+	//wlan_set_event_mask(HCI_EVNT_WLAN_KEEPALIVE|HCI_EVNT_WLAN_UNSOL_INIT|HCI_EVNT_WLAN_ASYNC_PING_REPORT);
+	wlan_set_event_mask(HCI_EVNT_WLAN_KEEPALIVE|HCI_EVNT_WLAN_UNSOL_INIT);
 
 	// Setup the timeout values
 	netapp_timeout_values( (unsigned long *)&WIFI_DHCP_TIMEOUT, (unsigned long *)&WIFI_ARP_TIMEOUT, (unsigned long *)&WIFI_KEEPALIVE_TIMEOUT, (unsigned long *)&WIFI_INACTIVITY_TIMEOUT );
+
+	// Init soldersplash UDP coms
+	SSUDP_Init();
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Wifi_IsConnected - Is WiFi Connected?
+*/
+// ------------------------------------------------------------------------------------------------------------
+bool Wifi_IsConnected ( void )
+{
+	if ( ulCC3000Connected && ulCC3000DHCP )
+	{
+		return ( true );
+	}
+	else
+	{
+		return ( false );
+	}
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -138,6 +196,8 @@ void CC3000_UsynchCallback(long lEventType, char * data, unsigned char length)
 			ulCC3000Connected = 0;
 			ulCC3000DHCP      = 0;
 			ulCC3000DHCP_configured = 0;
+			IpConfDataCached = false;
+			IpConfRequested = false;
 
 			Led( false );
 
@@ -145,20 +205,27 @@ void CC3000_UsynchCallback(long lEventType, char * data, unsigned char length)
 		break;
 
 		case HCI_EVNT_WLAN_UNSOL_DHCP :
+
+			// Note : WiFi connection can not be used until we receive this DHCP event even if we are using a static IP
 			ulCC3000DHCP = 1;
-			ConsoleInsertPrintf("Callback : DHCP");
+
+			ConsoleInsertPrintf("Callback : DHCP - IP Address : %i.%i.%i.%i", data[3], data[2], data[1], data[0]);
 		break;
 
 		case HCI_EVENT_CC3000_CAN_SHUT_DOWN :
 			OkToDoShutDown = 1;
+			ConsoleInsertPrintf("Callback : CC3000 TX Complete");
 		break;
 
 		case HCI_EVNT_WLAN_ASYNC_PING_REPORT :
 			ConsoleInsertPrintf("Callback : Recvd Ping!");
+			WifiPingReport = data;
+
+			ConsoleInsertPrintf("Ping Results : Min ( %d ) Max ( %d ) Average ( %d )", WifiPingReport->min_round_time, WifiPingReport->max_round_time, WifiPingReport->avg_round_time);
 		break;
 
 		case HCI_EVNT_BSD_TCP_CLOSE_WAIT :
-			ConsoleInsertPrintf("Callback : TCP Closed");
+			ConsoleInsertPrintf("Callback : Socket no %u closed", data[0]);
 		break;
 
 		default :
@@ -312,19 +379,25 @@ char *sendBootLoaderPatch(unsigned long *Length)
 	return NULL;
 }
 
-tNetappIpconfigRetArgs ipinfo;
 // ------------------------------------------------------------------------------------------------------------
 /*!
     @brief getCC3000Info
 */
 // ------------------------------------------------------------------------------------------------------------
-tNetappIpconfigRetArgs * getCC3000Info()
+tNetappIpconfigRetArgs * getCC3000Info( bool getCached )
 {
-    //if(!(currentCC3000State() & CC3000_SERVER_INIT))
-    //{
-        // If we're not blocked by accept or others, obtain the latest
-        netapp_ipconfig(&ipinfo);
-    //}
+	if (! getCached )
+	{
+		// Make sure we refresh the ipconfig/status
+		IpConfDataCached = false;
+	}
+
+	if (! IpConfDataCached )
+	{
+		netapp_ipconfig(&ipinfo);
+		IpConfDataCached = true;
+	}
+
     return (&ipinfo);
 }
 
@@ -398,11 +471,6 @@ bool result = true;
 //!			it exists upon completion of the process
 //
 //*****************************************************************************
-
-#define DISABLE                                                 (0)
-#define ENABLE                                                  (1)
-#define CC3000_UNENCRYPTED_SMART_CONFIG
-
 void StartSmartConfig(void)
 {
 	ulSmartConfigFinished = 0;
@@ -453,32 +521,82 @@ void StartSmartConfig(void)
 	// reset the CC3000
 	wlan_stop();
 
-	//__delay_cycles(6000000);
-	__WFI();
-	__WFI();
-	__WFI();
-	__WFI();
-	__WFI();
-	__WFI();
-	__WFI();
-	__WFI();
-	__WFI();
-	__WFI();
-	__WFI();
-	__WFI();
-	__WFI();
-	__WFI();
-	__WFI();
-
-	__WFI();
-	__WFI();
-	__WFI();
-
-
-	//DispatcherUartSendPacket((unsigned char*)pucUARTCommandSmartConfigDoneString, sizeof(pucUARTCommandSmartConfigDoneString));
+	DelayUs(5000);
 
 	wlan_start(0);
 
 	// Mask out all non-required events
 	wlan_set_event_mask(HCI_EVNT_WLAN_KEEPALIVE|HCI_EVNT_WLAN_UNSOL_INIT|HCI_EVNT_WLAN_ASYNC_PING_REPORT);
 }
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Wifi_StartScan - Start a scan for wifi access points SSID's
+*/
+// ------------------------------------------------------------------------------------------------------------
+void Wifi_StartScan ( uint32_t millseconds )
+{
+const uint32_t uiMinDwellTime = 50;
+const uint32_t uiMaxDwellTime = 100;
+const uint32_t uiNumOfProbeRequests = 5;
+const uint32_t uiChannelMask = 0x1fff;
+const int32_t iRSSIThreshold = -80;
+const uint32_t uiSNRThreshold = 0;
+const uint32_t uiDefaultTxPower = 205;
+const uint32_t aiIntervalList[16] = { 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000 };
+
+	// if millseconds = 1 that's a 10 minute scan!
+	wlan_ioctl_set_scan_params(millseconds, uiMinDwellTime,	uiMaxDwellTime,	uiNumOfProbeRequests, uiChannelMask, iRSSIThreshold, uiSNRThreshold, uiDefaultTxPower, aiIntervalList);
+
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Wifi_GetScanResults - Get scan result
+*/
+// ------------------------------------------------------------------------------------------------------------
+void Wifi_GetScanResults ( void )
+{
+uint8_t i = 0;
+uint8_t encryptionType = 0;
+uint8_t ssidLen = 0;
+ResultStruct_t scanResults;
+
+	wlan_ioctl_get_scan_results(0, (uint8_t*)&scanResults);
+	ConsoleInsertPrintf("Scan found %u WiFi networks", scanResults.num_networks);
+
+	i = scanResults.num_networks;
+	while (i)
+	{
+		// is this record valid?
+		if (scanResults.rssiByte & BIT0)
+		{
+			scanResults.rssiByte >>= 1;
+
+			encryptionType = (scanResults.Sec_ssidLen & 0x03);
+
+			ssidLen = scanResults.Sec_ssidLen >> 2;
+			if ( ssidLen < 32 )
+			{
+				// 0 Terminate the string for easy printf-ing
+				scanResults.ssid_name[ ssidLen ] = 0;
+			}
+
+			ConsoleInsertPrintf("%s - %s - RSSI : %d", scanResults.ssid_name, WIFI_SEC_TYPE[encryptionType], scanResults.rssiByte);
+		}
+		wlan_ioctl_get_scan_results(0, (uint8_t*)&scanResults);
+
+		i --;
+	}
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Wifi_Ping -
+*/
+// ------------------------------------------------------------------------------------------------------------
+void Wifi_SendPing ( uint32_t ip, uint32_t attempts, uint32_t packetsize, uint32_t timeout)
+{
+	netapp_ping_send(&ip, attempts, packetsize, timeout);
+}
+

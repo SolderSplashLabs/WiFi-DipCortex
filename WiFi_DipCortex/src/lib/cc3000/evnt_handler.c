@@ -227,13 +227,14 @@ void hci_unsol_handle_patch_request(char *event_hdr)
 unsigned char *
 hci_event_handler(void *pRetParams, unsigned char *from, unsigned char *fromlen)
 {
-	unsigned char *pucReceivedData, ucArgsize;
-	unsigned short usLength;
-	unsigned char *pucReceivedParams;
-	unsigned short usReceivedEventOpcode = 0;
-	unsigned long retValue32;
-  unsigned char * RecvParams;
-  unsigned char *RetParams;
+unsigned char *pucReceivedData, ucArgsize;
+unsigned short usLength;
+unsigned char *pucReceivedParams;
+unsigned short usReceivedEventOpcode = 0;
+unsigned long retValue32;
+unsigned char * RecvParams;
+unsigned char *RetParams;
+uint32_t startUptime = Time_Uptime();
 	
 	
 	while (1)
@@ -482,6 +483,12 @@ hci_event_handler(void *pRetParams, unsigned char *from, unsigned char *fromlen)
 			{
 				return NULL;
 			}	
+		}
+
+		// While timeout
+		if ( Time_Uptime() > (startUptime + 14) )
+		{
+			break;
 		}
 	}
 

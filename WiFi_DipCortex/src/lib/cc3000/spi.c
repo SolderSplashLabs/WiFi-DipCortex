@@ -48,66 +48,22 @@
 
 */
 
+#include "string.h"
 #include "SolderSplashLpc.h"
 
 #include "hci.h"
-#include "spi.h"
 #include "evnt_handler.h"
 #include "delay.h"
 #include "gpio.h"
 
 
-#define READ                    			3
-#define WRITE                   			1
+#define _SPI_
+#include "spi.h"
 
-#define HI(value)               			(((value) & 0xFF00) >> 8)
-#define LO(value)               			((value) & 0x00FF)
-
-#define SPI_HEADER_SIZE						(5)
-#define HEADERS_SIZE_EVNT       			(SPI_HEADER_SIZE + 5)
-
-#define eSPI_STATE_POWERUP 				 	(0)
-#define eSPI_STATE_INITIALIZED  		 	(1)
-#define eSPI_STATE_IDLE					 	(2)
-#define eSPI_STATE_WRITE_IRQ	   		 	(3)
-#define eSPI_STATE_WRITE_FIRST_PORTION   	(4)
-#define eSPI_STATE_WRITE_EOT			 	(5)
-#define eSPI_STATE_READ_IRQ				 	(6)
-#define eSPI_STATE_READ_FIRST_PORTION	 	(7)
-#define eSPI_STATE_READ_EOT				 	(8)
-
-// The magic number that resides at the end of the TX/RX buffer (1 byte after the allocated size)
-// for the purpose of detection of the overrun. The location of the memory where the magic number
-// resides shall never be written. In case it is written - the overrun occured and either recevie function
-// or send function will stuck forever.
-#define CC3000_BUFFER_MAGIC_NUMBER 			(0xDE)
-
-typedef struct
-{
-	gcSpiHandleRx  SPIRxHandler;
-
-	unsigned short usTxPacketLength;
-	unsigned short usRxPacketLength;
-	unsigned long  ulSpiState;
-	unsigned char *pTxPacket;
-	unsigned char *pRxPacket;
-
-}tSpiInformation;
-
-
-tSpiInformation sSpiInformation;
-
-char spi_buffer[CC3000_RX_BUFFER_SIZE];
-unsigned char wlan_tx_buffer[CC3000_TX_BUFFER_SIZE];
-
-//
-// Static buffer for 5 bytes of SPI HEADER
-//
-unsigned char tSpiReadHeader[] = {READ, 0, 0, 0, 0};
 
 // ------------------------------------------------------------------------------------------------------------
 /*!
-    @brief SpiInit
+    @brief SpiInit - CC3000 Module uses SPI1 on the DipCortex
 */
 // ------------------------------------------------------------------------------------------------------------
 void SpiInit ( void )
@@ -119,35 +75,38 @@ volatile uint32_t data;
 	DEASSERT_CS();
 	LPC_GPIO->DIR[SPI_CS_PORT] |= SPI_CS_PIN_MASK;
 
+	// Enable the SPI1 Clock
+	LPC_SYSCON->SYSAHBCLKCTRL |= (0x1<<18);
+
 	// Reset the SPI peripheral
 	LPC_SYSCON->PRESETCTRL |= (0x1<<2);
 
-	// Enable the SPI1 Clock
-	LPC_SYSCON->SYSAHBCLKCTRL |= (0x1<<18);
+	// Divide by 1 = Peripheral clock enabled
 	LPC_SYSCON->SSP1CLKDIV = 1;
 
-	// NOTE : were a slave not sure we get a to choose!
-	LPC_SYSCON->SSP1CLKDIV = 1;
-
-	// SPI CLk
+	// SPI CLk - IO Config
 	LPC_IOCON->PIO1_20 = 2;
 
-	// SSP CS Enable
+	// SSP CS Enable - IO Config
+	// We are using it as a GPIO
 	//LPC_IOCON->PIO0_2 = 1;
 
-	// MISO Enable
+	// MISO Enable - IO Config
 	LPC_IOCON->PIO1_21 = 2;
 
-	// MOSI Enable
+	// MOSI Enable - IO Config
 	LPC_IOCON->PIO1_22 = 2;
 
-	// Set DSS data to 8-bit, Frame format SPI, CPHA = 0, and SCR is 3 ( 4clocks - 1 )
-	// CPOL = 0 = Clock Low between frames
-	LPC_SSP1->CR0 = 0x00000007 | 0x00000500;
-	LPC_SSP1->CR0 |= SSPCR0_SPH;
-
-	// Must be even
+	// SPI Clock Speed = Perhiperal Clock / ( CPSR * (SCR+1) )
+	// Clock Prescale Register - Must be even
 	LPC_SSP1->CPSR = 2;
+
+	// DSS  = 0x7, 8-bit
+	// FRF  = 0, Frame format SPI
+	// CPHA = 1, Data captured on falling edge of the clock
+	// CPOL = 0, Clock Low between frames, and SCR is 3 ( 4clocks - 1 )
+	// SCR = 2, 36Mhz/(2+1) = 12Mhz Clock rate
+	LPC_SSP1->CR0 = 0 | 0x7 | SSPCR0_SPH | 0x0200;
 
 	// Manual CS
 	LPC_GPIO->DIR[SPI_CS_PORT] |= SPI_CS_PIN_MASK;
@@ -160,15 +119,6 @@ volatile uint32_t data;
 
 	// SSE - Enabled, Master
 	LPC_SSP1->CR1 = 0 | SSPCR1_SSE;
-
-
-	/* Set SSPINMS registers to enable interrupts */
-	/* enable all error related interrupts */
-	//LPC_SSP0->IMSC = SSPIMSC_RORIM | SSPIMSC_RTIM;
-
-	// Enable the SSP Interrupt
-	//NVIC_EnableIRQ(SSP0_IRQn);
-	//LPC_SSP0->IMSC = SSPIMSC_RXIM | SSPIMSC_RORIM | SSPIMSC_RTIM;
 }
 
 //*****************************************************************************
@@ -195,22 +145,23 @@ volatile uint32_t temp = 0;
 
 		size --;
 		data++;
+
+		// Empty any data RX'd we don't want it, or for it to fill our fifo
+		temp = LPC_SSP1->DR;
     }
 
-	// Wait until it's all left the FIFO
+	// Wait until it's all left the TX FIFO
 	while (! LPC_SSP1->SR & SSPSR_TFE );
 	{
 		// dummy read
 		temp = LPC_SSP1->DR;
 	}
 
-	// Remove all data from the FIFO
+	// Remove all data from the RX FIFO
 	while ((LPC_SSP1->SR & (SSPSR_BSY | SSPSR_RNE)))
 	{
 		temp = LPC_SSP1->DR;
 	}
-
-	temp = LPC_SSP1->DR;
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -510,8 +461,7 @@ void SpiTriggerRxProcessing(void)
 //!  \brief  ...
 //
 //*****************************************************************************
-long
-SpiReadDataCont(void)
+long SpiReadDataCont(void)
 {
     long data_to_recv;
 	unsigned char *evnt_buff, type;
@@ -591,7 +541,7 @@ void SSIContReadOperation(void)
 	if (!SpiReadDataCont())
 	{
 		//
-		// All the data was read - finalize handling by switching to teh task
+		// All the data was read - finalize handling by switching to the task
 		//	and calling from task Event Handler
 		//
 		SpiTriggerRxProcessing();
