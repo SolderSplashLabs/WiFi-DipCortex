@@ -55,6 +55,7 @@
 #include "delay.h"
 #include "cc3000\spi.h"
 #include "SystemConfig.h"
+#include "buttonCon.h"
 
 #include "SolderSplashUdp.h"
 
@@ -69,10 +70,13 @@
 void Wifi_Task ( void )
 {
 volatile tNetappIpconfigRetArgs *cc3000Status;
+uint8_t pressed;
 
-	if (! IpConfRequested )
+	Buttons_GetPressed(&pressed);
+
+	if (Wifi_IsConnected())
 	{
-		if (Wifi_IsConnected())
+		if (! IpConfRequested )
 		{
 			cc3000Status = getCC3000Info( false );
 			SntpUpdate( false );
@@ -80,7 +84,21 @@ volatile tNetappIpconfigRetArgs *cc3000Status;
 
 			IpConfRequested = true;
 		}
+
+		if (( pressed & BUTTON1 ) || ( pressed & BUTTON2 ))
+		{
+			httpPostProwl("Button Press", "Someone pressed the button!");
+		}
 	}
+
+	Buttons_GetHeld(&pressed);
+
+	if (( pressed & BUTTON3 ) && ( pressed & BUTTON2 ))
+	{
+		// NVIC_SystemReset();
+	}
+
+	Buttons_ActionPressed();
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -386,6 +404,11 @@ char *sendBootLoaderPatch(unsigned long *Length)
 // ------------------------------------------------------------------------------------------------------------
 tNetappIpconfigRetArgs * getCC3000Info( bool getCached )
 {
+	if (! Wifi_IsConnected() )
+	{
+		IpConfDataCached = false;
+	}
+
 	if (! getCached )
 	{
 		// Make sure we refresh the ipconfig/status
@@ -536,11 +559,11 @@ void StartSmartConfig(void)
 // ------------------------------------------------------------------------------------------------------------
 void Wifi_StartScan ( uint32_t millseconds )
 {
-const uint32_t uiMinDwellTime = 50;
+const uint32_t uiMinDwellTime = 100;
 const uint32_t uiMaxDwellTime = 100;
 const uint32_t uiNumOfProbeRequests = 5;
 const uint32_t uiChannelMask = 0x1fff;
-const int32_t iRSSIThreshold = -80;
+const int32_t iRSSIThreshold = -120;	// This might be a bit low, ti recommend -80
 const uint32_t uiSNRThreshold = 0;
 const uint32_t uiDefaultTxPower = 205;
 const uint32_t aiIntervalList[16] = { 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000 };
@@ -569,9 +592,10 @@ ResultStruct_t scanResults;
 	while (i)
 	{
 		// is this record valid?
-		if (scanResults.rssiByte & BIT0)
+		//if (scanResults.rssiByte & BIT0)
+		if (scanResults.valid)
 		{
-			scanResults.rssiByte >>= 1;
+			//scanResults.rssiByte >>= 1;
 
 			encryptionType = (scanResults.Sec_ssidLen & 0x03);
 
@@ -582,7 +606,8 @@ ResultStruct_t scanResults;
 				scanResults.ssid_name[ ssidLen ] = 0;
 			}
 
-			ConsoleInsertPrintf("%s - %s - RSSI : %d", scanResults.ssid_name, WIFI_SEC_TYPE[encryptionType], scanResults.rssiByte);
+			//ConsoleInsertPrintf("%s (%s) RSSI (%d) Age (%d)", scanResults.ssid_name, WIFI_SEC_TYPE[encryptionType], scanResults.rssiByte, scanResults.time);
+			ConsoleInsertPrintf("%s (%s) RSSI (%d)", scanResults.ssid_name, WIFI_SEC_TYPE[encryptionType], scanResults.rssiByte);
 		}
 		wlan_ioctl_get_scan_results(0, (uint8_t*)&scanResults);
 

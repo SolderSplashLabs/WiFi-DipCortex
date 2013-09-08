@@ -142,26 +142,26 @@ uint8_t *ip;
 		if ( Wifi_IsConnected() )
 		{
 			ConsoleInsertPrintf("Connected to: %s", (char *)&cc3000Status->uaSSID[0]);
+
+			tmpPtr = (uint8_t *)&cc3000Status->uaMacAddr;
+			ConsoleInsertPrintf("MAC : %02X-%02X-%02X-%02X-%02X-%02X" , tmpPtr[5], tmpPtr[4], tmpPtr[3], tmpPtr[2], tmpPtr[1], tmpPtr[0]);
+
+			tmpPtr = (uint8_t *)&cc3000Status->aucIP;
+			ConsoleInsertPrintf("IP : %d.%d.%d.%d", tmpPtr[3], tmpPtr[2], tmpPtr[1], tmpPtr[0] );
+
+			tmpPtr = (uint8_t *)&cc3000Status->aucDefaultGateway;
+			ConsoleInsertPrintf("Gateway : %d.%d.%d.%d", tmpPtr[3], tmpPtr[2], tmpPtr[1], tmpPtr[0] );
+
+			tmpPtr = (uint8_t *)&cc3000Status->aucDNSServer;
+			ConsoleInsertPrintf("DNS : %d.%d.%d.%d", tmpPtr[3], tmpPtr[2], tmpPtr[1], tmpPtr[0] );
+
+			tmpPtr = (uint8_t *)&cc3000Status->aucSubnetMask;
+			ConsoleInsertPrintf("Subnet : %d.%d.%d.%d", tmpPtr[3], tmpPtr[2], tmpPtr[1], tmpPtr[0] );
 		}
 		else
 		{
 			ConsoleInsertPrintf("Not Connected");
 		}
-
-		tmpPtr = (uint8_t *)&cc3000Status->uaMacAddr;
-		ConsoleInsertPrintf("MAC : %02X-%02X-%02X-%02X-%02X-%02X" , tmpPtr[5], tmpPtr[4], tmpPtr[3], tmpPtr[2], tmpPtr[1], tmpPtr[0]);
-
-		tmpPtr = (uint8_t *)&cc3000Status->aucIP;
-		ConsoleInsertPrintf("IP : %d.%d.%d.%d", tmpPtr[3], tmpPtr[2], tmpPtr[1], tmpPtr[0] );
-
-		tmpPtr = (uint8_t *)&cc3000Status->aucDefaultGateway;
-		ConsoleInsertPrintf("Gateway : %d.%d.%d.%d", tmpPtr[3], tmpPtr[2], tmpPtr[1], tmpPtr[0] );
-
-		tmpPtr = (uint8_t *)&cc3000Status->aucDNSServer;
-		ConsoleInsertPrintf("DNS : %d.%d.%d.%d", tmpPtr[3], tmpPtr[2], tmpPtr[1], tmpPtr[0] );
-
-		tmpPtr = (uint8_t *)&cc3000Status->aucSubnetMask;
-		ConsoleInsertPrintf("Subnet : %d.%d.%d.%d", tmpPtr[3], tmpPtr[2], tmpPtr[1], tmpPtr[0] );
 	}
 	return(1);
 }
@@ -242,10 +242,20 @@ int CLI_WlanDisconnect (int argc, char **argv)
 int CLI_WlanStatus (int argc, char **argv)
 {
 uint8_t buffer[2];
+long status;
 
 	ConsolePrintf("\r\n");
 	ConsoleInsertPrintf("\r\nAsking for current Wifi status");
-	ConsoleInsertPrintf("Wifi Status Returned : %d", wlan_ioctl_statusget());
+
+	status = wlan_ioctl_statusget();
+	if (( status > -1 ) && ( status < 4 ))
+	{
+		ConsoleInsertPrintf("Wifi Status Returned : %s", WIFI_STATUS[status]);
+	}
+	else
+	{
+		ConsoleInsertPrintf("Read status failed!");
+	}
 
 	if (! nvmem_read_sp_version( (unsigned char*)&buffer ) )
 	{

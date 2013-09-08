@@ -28,22 +28,23 @@ void Wifi_SendPing ( uint32_t ip, uint32_t attempts, uint32_t packetsize, uint32
 void Wifi_StartScan ( uint32_t millseconds );
 void StartSmartConfig(void);
 
+#ifdef _WIFI_APP_
+
 typedef struct Result_Struct
 {
   uint32_t  num_networks;
   uint32_t  scan_status;
-  uint8_t   rssiByte;
+  uint8_t 	valid:1;
+  uint8_t  	rssiByte:7;
   uint8_t   Sec_ssidLen;
   uint16_t  time;
   uint8_t   ssid_name[32];
   uint8_t   bssid[6];
 } ResultStruct_t;
 
-
-#ifdef _WIFI_APP_
-
 //   0 - Open, 1 - WEP, 2 WPA, 3 WPA2
 const char * WIFI_SEC_TYPE[] = {"Open", "WEP", "WPA", "WPA2"};
+const char * WIFI_STATUS[] = {"Disconnected", "Scanning", "Connecting", "Connected"};
 
 bool IpConfRequested = false;
 bool IpConfDataCached = false;
@@ -69,5 +70,9 @@ tNetappIpconfigRetArgs ipinfo;
 
 #else
 
+extern volatile uint8_t cMacFromEeprom[MAC_ADDR_LEN];
+extern bool ParametersRead;
+extern uint8_t cRMParamsFromEeprom[128];						// This array holds the CC3000's eeprom parameters
+extern const char * WIFI_STATUS[];
 
 #endif

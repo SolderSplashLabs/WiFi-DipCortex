@@ -106,7 +106,8 @@ volatile uint32_t data;
 	// CPHA = 1, Data captured on falling edge of the clock
 	// CPOL = 0, Clock Low between frames, and SCR is 3 ( 4clocks - 1 )
 	// SCR = 2, 36Mhz/(2+1) = 12Mhz Clock rate
-	LPC_SSP1->CR0 = 0 | 0x7 | SSPCR0_SPH | 0x0200;
+	//LPC_SSP1->CR0 = 0 | 0x7 | SSPCR0_SPH | 0x0200;
+	LPC_SSP1->CR0 = 0 | 0x7 | SSPCR0_SPH | 0x0300;
 
 	// Manual CS
 	LPC_GPIO->DIR[SPI_CS_PORT] |= SPI_CS_PIN_MASK;

@@ -114,6 +114,8 @@ void init(void)
 
 	CLI_Init();
 
+	Buttons_Init();
+
 	// Start USB CDC Console
 	UsbCdcInit();
 
@@ -134,12 +136,16 @@ int main(void)
 	// Set up the System Tick for a 1ms interrupt
 	SysTick_Config(SYSTICK);
 
+	LPC_GPIO->DIR[0] |= 0x02;
+	LPC_GPIO->CLR[0] = 0x02;
+
 	while(1)
 	{
 		if ( sysTicked )
 		{
 			sysTicked = false;
 
+			Buttons_Task(SYSTICKMS);
 			Wifi_Task();
 			SntpTask();
 			Console_Task();
