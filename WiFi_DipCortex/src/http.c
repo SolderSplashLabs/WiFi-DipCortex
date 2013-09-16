@@ -67,7 +67,7 @@ bool haveIp = false;
 	    }
 	    else
 	    {
-	    	if(gethostbyname(hostname, strlen(hostname), (unsigned long*)&serverIp) > 0)
+	    	if(DnsCache_Query(hostname, strlen(hostname), (unsigned long*)&serverIp) > 0)
 			{
 				//correcting the endianess
 				tSocketAddr.sa_data[5] = BYTE_N(serverIp,0);  // First octet of destination IP
@@ -165,7 +165,7 @@ bool haveIp = false;
 	    }
 	    else
 	    {
-	    	if(gethostbyname(hostname, strlen(hostname), (unsigned long*)&serverIp) > 0)
+	    	if(DnsCache_Query(hostname, strlen(hostname), (unsigned long*)&serverIp) > 0)
 			{
 				//correcting the endianess
 				tSocketAddr.sa_data[5] = BYTE_N(serverIp,0);  // First octet of destination IP
@@ -249,7 +249,7 @@ bool haveIp = false;
 	    tSocketAddr.sa_data[0] = (80 & 0xFF00) >> 8;
 	    tSocketAddr.sa_data[1] = (80 & 0x00FF);
 
-		if(gethostbyname(HTTP_PROWL_HOSTNAME, strlen(HTTP_PROWL_HOSTNAME), (unsigned long*)&serverIp) > 0)
+		if(DnsCache_Query(HTTP_PROWL_HOSTNAME, strlen(HTTP_PROWL_HOSTNAME), (unsigned long*)&serverIp) > 0)
 		{
 			//correcting the endianess
 			tSocketAddr.sa_data[5] = BYTE_N(serverIp,0);  // First octet of destination IP
@@ -329,7 +329,7 @@ uint32_t timeout = 500;
 	    tSocketAddr.sa_data[1] = (80 & 0x00FF);
 
 
-	    if(gethostbyname(hostname, strlen(hostname), (unsigned long*)&serverIp) > 0)
+	    if(DnsCache_Query(hostname, strlen(hostname), (unsigned long*)&serverIp) > 0)
 	    {
 	    	//correcting the endianess
 	        tSocketAddr.sa_data[5] = BYTE_N(serverIp,0);  // First octet of destination IP

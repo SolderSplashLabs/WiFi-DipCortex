@@ -461,9 +461,19 @@ uint32_t startUptime = Time_Uptime();
 					memcpy(from, (pucReceivedData + HCI_DATA_HEADER_SIZE + BSD_RECV_FROM_FROM_OFFSET) ,*fromlen);
 				}
 				
+				if ( pRetParams )
+				{
 				memcpy(pRetParams, pucReceivedParams + HCI_DATA_HEADER_SIZE + ucArgsize,
 							 usLength - ucArgsize);
-				
+				}
+				else
+				{
+					while(1);
+					{
+						// WTF
+						__NOP();
+					}
+				}
 				tSLInformation.usRxDataPending = 0;
 			}
 		

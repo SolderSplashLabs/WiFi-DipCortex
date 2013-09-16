@@ -270,7 +270,7 @@ wlan_start(unsigned short usPatchesAvailableAtHost)
 	tSLInformation.pucReceivedData = 0;
 	
 	// Allocate the memory for the RX/TX data transactions
-	tSLInformation.pucTxCommandBuffer = (unsigned char *)wlan_tx_buffer;
+	tSLInformation.pucTxCommandBuffer = (unsigned char *)SpiTxBuffer;
 	
 	// init spi
 	SpiOpen(SpiReceiveHandler);

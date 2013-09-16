@@ -120,9 +120,7 @@ unsigned long ipAddr = 0;
 	LPC_GPIO->CLR[WLAN_EN_PORT] = WLAN_EN_PIN_MASK;
 
 	// WLAN On API Implementation
-	wlan_init( CC3000_UsynchCallback, sendWLFWPatch, sendDriverPatch, sendBootLoaderPatch, ReadWlanInterruptPin, WlanInterruptEnable, WlanInterruptDisable, WriteWlanPin);
-
-	DelayUs(1000);
+	wlan_init( CC3000_UsynchCallback, sendWLFWPatch, sendDriverPatch, sendBootLoaderPatch, ReadWlanInterruptPin, Spi_IrqEnable, Spi_IrqDisable, WriteWlanPin);
 
 	// Trigger a WLAN device, 0 = no patches, 1 = patches availible
 	wlan_start(initType);
@@ -183,7 +181,7 @@ void PIN_INT0_IRQHandler ( void )
 		LPC_GPIO_PIN_INT->RISE = 0x1<<0;
 		LPC_GPIO_PIN_INT->IST = 0x1<<0;
 		// Call CC3000 Interrupt
-		Wlan_IrqIntterupt();
+		Spi_IrqInterrupt();
 	}
 }
 
@@ -246,11 +244,28 @@ void CC3000_UsynchCallback(long lEventType, char * data, unsigned char length)
 			ConsoleInsertPrintf("Callback : Socket no %u closed", data[0]);
 		break;
 
+		case HCI_EVNT_WLAN_UNSOL_INIT :
+			//Notification that the CC3000 device finished the initialization process
+			ConsoleInsertPrintf("Callback : Init 0x%04X", lEventType);
+		break;
+
+		case HCI_EVNT_WLAN_TX_COMPLETE :
+			ConsoleInsertPrintf("Callback : TX Complete 0x%04X", lEventType);
+		break;
+
+		case HCI_EVNT_WLAN_KEEPALIVE :
+			ConsoleInsertPrintf("Callback : KeepAlive 0x%04X", lEventType);
+		break;
+
 		default :
-			ConsoleInsertPrintf("Callback : Unknown : %u ", lEventType);
+			// Not sure what this call back is!
+			ConsoleInsertPrintf("Callback : Unknown : 0x%04X ", lEventType);
 
 	}
 }
+
+
+
 
 //*****************************************************************************
 //
@@ -291,56 +306,6 @@ long ReadWlanInterruptPin(void)
 	uint32_t result = LPC_GPIO->PIN[WLAN_IRQ_PORT] & WLAN_IRQ_PIN_MASK;
 
 	return (result);
-}
-
-//*****************************************************************************
-//
-//! Enable wlan IrQ pin
-//!
-//! \param  none
-//!
-//! \return none
-//!
-//! \brief  Nonr
-//
-//*****************************************************************************
-void WlanInterruptEnable()
-{
-
-	// Clear any interrupts
-	LPC_GPIO_PIN_INT->RISE = 0x1<<0;
-	LPC_GPIO_PIN_INT->FALL = 0x1<<0;
-	LPC_GPIO_PIN_INT->IST = 0x1<<0;
-
-	// IRQ as Input
-	LPC_GPIO->DIR[WLAN_IRQ_PORT] &= ~(WLAN_IRQ_PIN_MASK);
-
-	LPC_GPIO_PIN_INT->RISE = 0x1<<0;
-	LPC_GPIO_PIN_INT->FALL = 0x1<<0;
-	LPC_GPIO_PIN_INT->IST = 0x1<<0;
-
-	// Enable IRQ GPIO Init High and Low
-	GPIOSetPinInterrupt(0, WLAN_IRQ_PORT, WLAN_IRQ_PIN_NO, 0, 0);
-
-	GPIOPinIntEnable(CHANNEL0, 0);
-	// One below the lowest
-	NVIC_SetPriority(PIN_INT0_IRQn, 6);
-}
-
-//*****************************************************************************
-//
-//! Disable wlan IrQ pin
-//!
-//! \param  none
-//!
-//! \return none
-//!
-//! \brief  Nonr
-//
-//*****************************************************************************
-void WlanInterruptDisable()
-{
-	GPIOPinIntDisable(CHANNEL0, 0);
 }
 
 //*****************************************************************************

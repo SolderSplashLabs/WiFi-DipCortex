@@ -10,6 +10,6 @@ void httpPutJsonString (char *hostname, char *uri, uint32_t ip, char * jsonStr);
 
 #ifdef _HTTP_
 
-char HttpCmdBuffer[700];
+char HttpCmdBuffer[500];
 
 #endif

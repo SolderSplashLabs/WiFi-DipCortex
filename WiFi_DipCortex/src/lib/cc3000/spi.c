@@ -60,6 +60,483 @@
 #define _SPI_
 #include "spi.h"
 
+typedef enum SPI_STATE
+{
+	SPI_STATE_POWERUP = 0,
+	SPI_STATE_INITALISED,
+	SPI_STATE_FIRST_WRITE,
+	SPI_STATE_IDLE,
+	SPI_STATE_CMD_RXD,
+	SPI_WAITING_TO_WRITE,
+} SPI_STATE;
+
+SPI_STATE SpiCurrentState = SPI_STATE_POWERUP;
+
+uint8_t SpiRxBuffer[CC3000_RX_BUFFER_SIZE];
+uint8_t SpiTxBuffer[CC3000_TX_BUFFER_SIZE];
+
+uint16_t SpiWriteLen = 0;
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Spi_IrqEnable - Enable the IRQ interrupt
+*/
+// ------------------------------------------------------------------------------------------------------------
+void Spi_IrqEnable ( void )
+{
+	// IRQ as Input
+	LPC_GPIO->DIR[WLAN_IRQ_PORT] &= ~(WLAN_IRQ_PIN_MASK);
+
+	// Clear any interrupts
+	LPC_GPIO_PIN_INT->RISE = 0x1<<0;
+	LPC_GPIO_PIN_INT->FALL = 0x1<<0;
+	LPC_GPIO_PIN_INT->IST = 0x1<<0;
+
+	// Enable IRQ GPIO Init High and Low
+	GPIOSetPinInterrupt(0, WLAN_IRQ_PORT, WLAN_IRQ_PIN_NO, 0, 0);
+
+	GPIOPinIntEnable(CHANNEL0, 0);
+
+	// One below the lowest
+	NVIC_SetPriority(PIN_INT0_IRQn, 6);
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Spi_IrqDisable - Disable the IRQ interrupt
+*/
+// ------------------------------------------------------------------------------------------------------------
+void Spi_IrqDisable ( void )
+{
+	GPIOPinIntDisable(CHANNEL0, 0);
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief SpiResumeSpi - Required by TI Driver
+*/
+// ------------------------------------------------------------------------------------------------------------
+void SpiResumeSpi(void)
+{
+	// Return to IDLE
+	SpiCurrentState = SPI_STATE_IDLE;
+
+	// Chip Select should still be asserted blocking any incoming events, so enable the interrupt
+	Spi_IrqEnable();
+
+	// De-select the WLAN module allowing it to continue
+	SPI_CS_DEASSERT();
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief SpiOpen - Required by TI Driver
+*/
+// ------------------------------------------------------------------------------------------------------------
+void SpiOpen (gcSpiHandleRx pfRxHandler)
+{
+	SpiCurrentState = SPI_STATE_POWERUP;
+
+	// Zero the buffers
+	memset(SpiRxBuffer, 0, sizeof(SpiRxBuffer));
+	memset(SpiTxBuffer, 0, sizeof(SpiTxBuffer));
+
+	SPI_HciRxFunc = pfRxHandler;
+
+	SpiWriteLen = 0;
+	sSpiInformation.pTxPacket = NULL;
+	sSpiInformation.usRxPacketLength = 0;
+
+	SpiRxBuffer[CC3000_RX_BUFFER_SIZE - 1] = CC3000_BUFFER_MAGIC_NUMBER;
+	SpiTxBuffer[CC3000_TX_BUFFER_SIZE - 1] = CC3000_BUFFER_MAGIC_NUMBER;
+
+	//
+	// Enable interrupt on the GPIO pin of WLAN IRQ
+	//
+	Spi_IrqEnable();
+
+	DelayUs(1000);
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief SpiClose - Required by the TI Driver
+*/
+// ------------------------------------------------------------------------------------------------------------
+void SpiClose(void)
+{
+	//	Disable IRQ Interrupt
+	Spi_IrqDisable();
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief SpiWrite - Required by the TI Driver - Sets up a message to TX by the IRQ interrupt
+*/
+// ------------------------------------------------------------------------------------------------------------
+long SpiWrite (unsigned char *pUserBuffer, unsigned short usLength)
+{
+    unsigned char ucPad = 0;
+
+	while (( SPI_WAITING_TO_WRITE == SpiCurrentState ) || ( SPI_STATE_CMD_RXD == SpiCurrentState ))
+	{
+		// TI Stack is blocking, so lets block if we are in this state.
+	}
+
+	// Figure out the total length of the packet in order to figure out if there is padding or not
+    if(!(usLength & 0x0001))
+    {
+        ucPad++;
+    }
+
+    pUserBuffer[0] = WRITE;
+    pUserBuffer[1] = HI(usLength + ucPad);
+    pUserBuffer[2] = LO(usLength + ucPad);
+    pUserBuffer[3] = 0;
+    pUserBuffer[4] = 0;
+
+    // Update the global for the interrupt
+    SpiWriteLen = usLength + (SPI_HEADER_SIZE + ucPad);
+
+    if ( ucPad )
+    {
+    	pUserBuffer[SpiWriteLen-1] = 0;
+    }
+
+
+	// Buffer overrun protection
+	if (SpiTxBuffer[CC3000_TX_BUFFER_SIZE - 1] != CC3000_BUFFER_MAGIC_NUMBER)
+	{
+		// TODO : Can we do anything?
+		while (1);
+	}
+
+	while ( SPI_STATE_POWERUP == SpiCurrentState )
+	{
+		// Wait!
+		if (! WLAN_IRQ() )
+		{
+			//NVIC_SetPendingIRQ(PIN_INT0_IRQn);
+			//NVIC->STIR = PIN_INT0_IRQn;
+			SpiCurrentState = SPI_STATE_INITALISED;
+			break;
+		}
+	}
+
+    if ( SPI_STATE_INITALISED == SpiCurrentState )
+    {
+    	// First message is a little different, we wait for the IRQ before Chip selecting
+		SPI_CS_ASSERT();
+
+		// It also requires a slight delay, i hate fixed delays but this is easiest for now
+		DelayUs(10);
+
+		Spi_WriteBuffer( &SpiTxBuffer[0], 4 );
+
+		// Special delay required when first communicating with the module
+		DelayUs(10);
+
+		// Then write the rest of the data
+		Spi_WriteBuffer(&SpiTxBuffer[4], SpiWriteLen-4);
+
+		SPI_CS_DEASSERT();
+		SpiWriteLen = 0;
+
+		// Go back to idle
+		SpiCurrentState = SPI_STATE_IDLE;
+    }
+    else
+    {
+    	// TODO : Check did we get IRQ'd while setting up a tx message?
+    	//Spi_IrqEnable();
+    	Spi_IrqDisable();
+    	SPI_CS_ASSERT();
+    	SpiCurrentState = SPI_WAITING_TO_WRITE;
+
+    	while ( WLAN_IRQ() )
+    	{
+    		// Waiting
+    	}
+
+    	if (! WLAN_IRQ() )
+		{
+    		// IRQ'd
+    		Spi_IrqInterrupt();
+		}
+    	else
+    	{
+    		// Timed out
+    	}
+    	Spi_IrqEnable();
+    }
+
+    return(0);
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Spi_WriteBuffer - Writes the supplied buffer to the bus, ignoring rx'd bytes during transmission
+*/
+// ------------------------------------------------------------------------------------------------------------
+void Spi_WriteBuffer(uint8_t *data, uint16_t size)
+{
+volatile uint32_t temp = 0;
+
+	if (( data ) && ( size ))
+	{
+		while (size)
+		{
+			// wait while the FIFO is full
+			while ((LPC_SSP1->SR & SSPSR_TNF) != SSPSR_TNF);
+
+			LPC_SSP1->DR = *data;
+
+			size --;
+			data++;
+
+			// Empty any data RX'd we don't want it, or for it to fill our fifo
+			temp = LPC_SSP1->DR;
+		}
+
+		// Wait until it's all left the TX FIFO
+		while (! LPC_SSP1->SR & SSPSR_TFE );
+		{
+			// dummy read
+			temp = LPC_SSP1->DR;
+		}
+
+		// Remove all data from the RX FIFO
+		while ((LPC_SSP1->SR & (SSPSR_BSY | SSPSR_RNE)))
+		{
+			temp = LPC_SSP1->DR;
+		}
+	}
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Spi_ReadIntoBuffer - Reads from the SPI in to the supplied buffer from the bus
+*/
+// ------------------------------------------------------------------------------------------------------------
+void Spi_ReadIntoBuffer(uint8_t *data, uint16_t size)
+{
+	long i = 0;
+    unsigned char *data_to_send = tSpiReadHeader;
+
+	for (i = 0; i < size; i ++)
+    {
+		while ( LPC_SSP1->SR & SSPSR_BSY );
+
+		//Dummy write to trigger the clock
+    	LPC_SSP1->DR = data_to_send[0];
+
+    	while ( LPC_SSP1->SR & SSPSR_BSY );
+    	while (! (LPC_SSP1->SR & SSPSR_TFE));
+
+		data[i] = LPC_SSP1->DR;
+    }
+}
+
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Spi_HciWrite - Called to write an HCI message to the SPI Bus by the interrupt
+*/
+// ------------------------------------------------------------------------------------------------------------
+
+/*
+void Spi_HciWrite ( uint8_t *buffer, uint16_t len )
+{
+uint16_t hciWritePos = 0;
+
+    //SerialPort.printf("HCI SPI Writing\r\n");
+
+    // Null pointer & length check
+    if (( buffer ) && ( len ))
+    {
+        hciWritePos = 0;
+
+        if ( SPI_STATE_INITIALISING == SpiCurrentState )
+        {
+        	Spi_WriteBuffer( buffer, 4 );
+
+            hciWritePos = 4;
+
+            // Special delay required when first communicating with the module
+            DelayUs(50);
+        }
+
+        if ( hciWritePos < len )
+        {
+        	Spi_WriteBuffer( &buffer[hciWritePos], len-4 );
+        }
+    }
+}
+*/
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Spi_IrqInterrupt - fire on the IRQ line falling
+*/
+// ------------------------------------------------------------------------------------------------------------
+void Spi_IrqInterrupt ( void )
+{
+uint8_t msgType = 0;
+uint16_t length = 0;
+
+	// Check this interrupt was caused IRQ interrupt, leave if the line is high
+	if ( WLAN_IRQ() ) return;
+
+    //SerialPort.printf("IRQ Interrupt\r\n");
+
+    switch ( SpiCurrentState )
+    {
+    	case SPI_STATE_CMD_RXD :
+    		// We should not interrupt while in this state, if we do it means a command hasnt been processed and some how the interrupt has been enabled
+    	break;
+
+        case SPI_STATE_IDLE :
+
+            // Unsolicited message from the module
+            // Tell module we want want to talk to it
+        	SPI_CS_ASSERT();
+
+            // Each message is a minimum of 10 bytes
+        	Spi_ReadIntoBuffer(SpiRxBuffer, 10);
+
+            // What type of message did we get?, first byte after the header
+            msgType = SpiRxBuffer[SPI_HEADER_SIZE];
+
+            switch ( msgType )
+            {
+                case HCI_TYPE_EVNT :
+
+                    length = SpiRxBuffer[SPI_HEADER_SIZE + HCI_DATA_LENGTH_OFFSET];
+
+                    length -= 1;
+
+                    if ((HEADERS_SIZE_EVNT + length) & 1)
+                    {
+                        length ++;
+                    }
+
+                    if ( length )
+                    {
+                    	Spi_ReadIntoBuffer(&SpiRxBuffer[10], length);
+                    }
+
+                    SpiCurrentState = SPI_STATE_CMD_RXD;
+                break;
+
+                case HCI_TYPE_DATA :
+                    length = (*(uint16_t *)(&SpiRxBuffer[SPI_HEADER_SIZE + HCI_DATA_LENGTH_OFFSET]));
+
+                    // All requests must be even length
+                    if (!((HEADERS_SIZE_EVNT + length) & 1))
+                    {
+                        length++;
+                    }
+
+                    // Is there anything to read in and will it fit
+                    if (length)
+					{
+						if ( length < (CC3000_RX_BUFFER_SIZE-10))
+						{
+							// Read the rest in
+							Spi_ReadIntoBuffer(&SpiRxBuffer[10], length);
+						}
+						else
+						{
+							// It wont fit!
+						}
+					}
+
+                break;
+
+                //default :
+                    //printf("Unknown packet type received\r\n");
+            }
+
+            // We have a message to process, turn off irq interupt
+            // Leave CS low to stop the module sending us another event while we process this one, eliminates the race condition
+            Spi_IrqDisable();
+
+            // Call TI Stack to process...
+            if ( SPI_HciRxFunc )
+            {
+            	SPI_HciRxFunc( &SpiRxBuffer[SPI_HEADER_SIZE] );
+            }
+            else
+            {
+            	// Can't process it if we don't have anywhere to send it
+            }
+
+            // Stack must resume SPI by calling SpiResumeSpi();
+        break;
+
+        case SPI_WAITING_TO_WRITE :
+            // We can tx the command we wanted to now
+            // Chip select line will already be set
+        	Spi_WriteBuffer(&SpiTxBuffer[0], SpiWriteLen);
+
+            SpiWriteLen = 0;
+            SPI_CS_DEASSERT();
+
+            SpiCurrentState = SPI_STATE_IDLE;
+        break;
+
+        case SPI_STATE_FIRST_WRITE :
+
+            // First message is a little different, we wait for the IRQ before Chip selecting
+        	SPI_CS_ASSERT();
+
+            // It also requires a slight delay, i hate fixed delays but this is easiest for now
+        	DelayUs(50);
+
+        	Spi_WriteBuffer( &SpiTxBuffer[0], 4 );
+
+        	// Special delay required when first communicating with the module
+        	DelayUs(50);
+
+            // Then write the rest of the data
+        	Spi_WriteBuffer(&SpiTxBuffer[4], SpiWriteLen-4);
+
+            SPI_CS_DEASSERT();
+            SpiWriteLen = 0;
+
+            // Go back to idle
+            SpiCurrentState = SPI_STATE_IDLE;
+        break;
+
+        case SPI_STATE_POWERUP :
+        	SpiCurrentState = SPI_STATE_INITALISED;
+        break;
+
+        case SPI_STATE_INITALISED :
+        	// Module is ready, we haven't had our first write as yet though
+        break;
+    }
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Spi_EnableModule - Controls the modules power/Enable line
+*/
+// ------------------------------------------------------------------------------------------------------------
+void Spi_EnableModule ( bool enable )
+{
+    if ( enable )
+    {
+        // Enable the CC3000 Module
+        //SerialPort.printf("Enabling the CC3000 Module\r\n");
+    	SPI_WLAN_EN();
+    }
+    else
+    {
+        //SerialPort.printf("Disabling the CC3000 Module\r\n");
+    	SPI_WLAN_DIS();
+    }
+}
 
 // ------------------------------------------------------------------------------------------------------------
 /*!
@@ -72,7 +549,7 @@ uint8_t i = 0;
 volatile uint32_t data;
 
 	// CS Output, high to de-chip select
-	DEASSERT_CS();
+	SPI_CS_DEASSERT();
 	LPC_GPIO->DIR[SPI_CS_PORT] |= SPI_CS_PIN_MASK;
 
 	// Enable the SPI1 Clock
@@ -120,472 +597,6 @@ volatile uint32_t data;
 
 	// SSE - Enabled, Master
 	LPC_SSP1->CR1 = 0 | SSPCR1_SSE;
-}
-
-//*****************************************************************************
-//
-//! Write to bus, dump returned data
-//!
-//!  \param  buffer
-//!
-//!  \return none
-//!
-//!  \brief  ...
-//
-//*****************************************************************************
-void SpiWriteDataSynchronous(unsigned char *data, unsigned short size)
-{
-volatile uint32_t temp = 0;
-
-	while (size)
-    {
-		// wait while the fifo is full
-		while ((LPC_SSP1->SR & SSPSR_TNF) != SSPSR_TNF);
-
-        LPC_SSP1->DR = *data;
-
-		size --;
-		data++;
-
-		// Empty any data RX'd we don't want it, or for it to fill our fifo
-		temp = LPC_SSP1->DR;
-    }
-
-	// Wait until it's all left the TX FIFO
-	while (! LPC_SSP1->SR & SSPSR_TFE );
-	{
-		// dummy read
-		temp = LPC_SSP1->DR;
-	}
-
-	// Remove all data from the RX FIFO
-	while ((LPC_SSP1->SR & (SSPSR_BSY | SSPSR_RNE)))
-	{
-		temp = LPC_SSP1->DR;
-	}
-}
-
-// ------------------------------------------------------------------------------------------------------------
-/*!
-    @brief SpiOpen
-*/
-// ------------------------------------------------------------------------------------------------------------
-void SpiOpen (gcSpiHandleRx pfRxHandler)
-{
-
-	sSpiInformation.ulSpiState = eSPI_STATE_POWERUP;
-
-	memset(spi_buffer, 0, sizeof(spi_buffer));
-	memset(wlan_tx_buffer, 0, sizeof(spi_buffer));
-
-	sSpiInformation.SPIRxHandler = pfRxHandler;
-	sSpiInformation.usTxPacketLength = 0;
-	sSpiInformation.pTxPacket = NULL;
-	sSpiInformation.pRxPacket = (unsigned char *)spi_buffer;
-	sSpiInformation.usRxPacketLength = 0;
-
-	spi_buffer[CC3000_RX_BUFFER_SIZE - 1] = CC3000_BUFFER_MAGIC_NUMBER;
-	wlan_tx_buffer[CC3000_TX_BUFFER_SIZE - 1] = CC3000_BUFFER_MAGIC_NUMBER;
-
-	//
-	// Enable interrupt on the GPIO pin of WLAN IRQ
-	//
-	tSLInformation.WlanInterruptEnable();
-
-}
-
-//*****************************************************************************
-//
-//! This function enter point for write flow
-//!
-//!  \param  buffer
-//!
-//!  \return none
-//!
-//!  \brief  ...
-//
-//*****************************************************************************
-long SpiFirstWrite(unsigned char *ucBuf, unsigned short usLength)
-{
-    //
-    // workaround for first transaction
-    //
-    ASSERT_CS();
-
-    DelayUs(100);
-
-    // SPI writes first 4 bytes of data
-    SpiWriteDataSynchronous(ucBuf, 4);
-
-    DelayUs(100);
-
-    SpiWriteDataSynchronous(ucBuf + 4, usLength - 4);
-
-    // From this point on - operate in a regular way
-    sSpiInformation.ulSpiState = eSPI_STATE_IDLE;
-
-    while (! LPC_SSP1->SR & SSPSR_TFE );
-    while ( LPC_SSP1->SR & SSPSR_BSY );
-
-    DEASSERT_CS();
-
-    return(0);
-}
-
-// ------------------------------------------------------------------------------------------------------------
-/*!
-    @brief SpiWrite
-*/
-// ------------------------------------------------------------------------------------------------------------
-long SpiWrite (unsigned char *pUserBuffer, unsigned short usLength)
-{
-    unsigned char ucPad = 0;
-
-	// Figure out the total length of the packet in order to figure out if there is padding or not
-    if(!(usLength & 0x0001))
-    {
-        ucPad++;
-    }
-
-    pUserBuffer[0] = WRITE;
-    pUserBuffer[1] = HI(usLength + ucPad);
-    pUserBuffer[2] = LO(usLength + ucPad);
-    pUserBuffer[3] = 0;
-    pUserBuffer[4] = 0;
-
-    usLength += (SPI_HEADER_SIZE + ucPad);
-
-	// The magic number that resides at the end of the TX/RX buffer (1 byte after the allocated size)
-	// for the purpose of overrun detection. If the magic number is overwritten - buffer overrun
-	// occurred - and we will be stuck here forever!
-	if (wlan_tx_buffer[CC3000_TX_BUFFER_SIZE - 1] != CC3000_BUFFER_MAGIC_NUMBER)
-	{
-		// TODO : Can we do anything?
-		while (1);
-	}
-
-	if (sSpiInformation.ulSpiState == eSPI_STATE_POWERUP)
-	{
-		while (sSpiInformation.ulSpiState != eSPI_STATE_INITIALIZED);
-	}
-
-	if (sSpiInformation.ulSpiState == eSPI_STATE_INITIALIZED)
-	{
-		//
-		// This is time for first TX/RX transactions over SPI: the IRQ is down - so need to send read buffer size command
-		//
-		SpiFirstWrite(pUserBuffer, usLength);
-	}
-	else
-	{
-		//
-		// We need to prevent here race that can occur in case two back to back packets are sent to the
-		// device, so the state will move to IDLE and once again to not IDLE due to IRQ
-		//
-		tSLInformation.WlanInterruptDisable();
-
-		while (sSpiInformation.ulSpiState != eSPI_STATE_IDLE)
-		{
-			;
-		}
-
-
-		sSpiInformation.ulSpiState = eSPI_STATE_WRITE_IRQ;
-		sSpiInformation.pTxPacket = pUserBuffer;
-		sSpiInformation.usTxPacketLength = usLength;
-
-		//
-		// Assert the CS line and wait till SSI IRQ line is active and then initialize write operation
-		//
-		ASSERT_CS();
-
-		//
-		// Re-enable IRQ - if it was not disabled - this is not a problem...
-		//
-		tSLInformation.WlanInterruptEnable();
-
-		//
-		// check for a missing interrupt between the CS assertion and enabling back the interrupts
-		//
-		if (tSLInformation.ReadWlanInterruptPin() == 0)
-		{
-            SpiWriteDataSynchronous(sSpiInformation.pTxPacket, sSpiInformation.usTxPacketLength);
-
-			sSpiInformation.ulSpiState = eSPI_STATE_IDLE;
-
-			DEASSERT_CS();
-		}
-	}
-
-
-	//
-	// Due to the fact that we are currently implementing a blocking situation
-	// here we will wait till end of transaction
-	//
-
-	while (eSPI_STATE_IDLE != sSpiInformation.ulSpiState);
-
-    return(0);
-}
-
-// ------------------------------------------------------------------------------------------------------------
-/*!
-    @brief SpiClose
-*/
-// ------------------------------------------------------------------------------------------------------------
-void SpiClose(void)
-{
-	if (sSpiInformation.pRxPacket)
-	{
-		sSpiInformation.pRxPacket = 0;
-	}
-
-	//	Disable IRQ Interrupt
-    tSLInformation.WlanInterruptDisable();
-}
-
-// ------------------------------------------------------------------------------------------------------------
-/*!
-    @brief SpiResumeSpi
-*/
-// ------------------------------------------------------------------------------------------------------------
-void SpiResumeSpi(void)
-{
-	GPIOPinIntEnable( 0, 0 );
-}
-
-
-//*****************************************************************************
-//
-//! This function enter point for write flow
-//!
-//!  \param  SpiPauseSpi
-//!
-//!  \return none
-//!
-//!  \brief  The function triggers a user provided callback for
-//
-//*****************************************************************************
-
-void SpiPauseSpi(void)
-{
-	  GPIOPinIntDisable( 0, 0 );
-}
-
-
-//*****************************************************************************
-//
-//! Read data from the bus
-//!
-//!  \param  buffer
-//!
-//!  \return none
-//!
-//!  \brief  ...
-//
-//*****************************************************************************
-void
-SpiReadDataSynchronous(unsigned char *data, unsigned short size)
-{
-	long i = 0;
-    unsigned char *data_to_send = tSpiReadHeader;
-
-	for (i = 0; i < size; i ++)
-    {
-		while ( LPC_SSP1->SR & SSPSR_BSY );
-
-		//Dummy write to trigger the clock
-    	LPC_SSP1->DR = data_to_send[0];
-
-    	while ( LPC_SSP1->SR & SSPSR_BSY );
-    	while (! (LPC_SSP1->SR & SSPSR_TFE));
-
-		data[i] = LPC_SSP1->DR;
-    }
-}
-
-//*****************************************************************************
-//
-//! This function enter point for read flow: first we read minimal 5 SPI header bytes and 5 Event
-//!	Data bytes
-//!
-//!  \param  buffer
-//!
-//!  \return none
-//!
-//!  \brief  ...
-//
-//*****************************************************************************
-void SpiReadHeader(void)
-{
-	SpiReadDataSynchronous(sSpiInformation.pRxPacket, 10);
-}
-
-//*****************************************************************************
-//
-//! This function enter point for write flow
-//!
-//!  \param  SpiTriggerRxProcessing
-//!
-//!  \return none
-//!
-//!  \brief  The function triggers a user provided callback for
-//
-//*****************************************************************************
-void SpiTriggerRxProcessing(void)
-{
-	// Trigger Rx processing
-	SpiPauseSpi();
-	DEASSERT_CS();
-
-	// The magic number that resides at the end of the TX/RX buffer (1 byte after the allocated size)
-	// for the purpose of detection of the overrun. If the magic number is overriten - buffer overrun
-	// occurred - and we will stuck here forever!
-	if (sSpiInformation.pRxPacket[CC3000_RX_BUFFER_SIZE - 1] != CC3000_BUFFER_MAGIC_NUMBER)
-	{
-		while (1);
-	}
-
-	sSpiInformation.ulSpiState = eSPI_STATE_IDLE;
-	sSpiInformation.SPIRxHandler(sSpiInformation.pRxPacket + SPI_HEADER_SIZE);
-}
-
-//*****************************************************************************
-//
-//! This function processes received SPI Header and in accordance with it - continues reading
-//!	the packet
-//!
-//!  \param  None
-//!
-//!  \return None
-//!
-//!  \brief  ...
-//
-//*****************************************************************************
-long SpiReadDataCont(void)
-{
-    long data_to_recv;
-	unsigned char *evnt_buff, type;
-
-    // determine what type of packet we have
-    evnt_buff =  sSpiInformation.pRxPacket;
-    data_to_recv = 0;
-	STREAM_TO_UINT8((char *)(evnt_buff + SPI_HEADER_SIZE), HCI_PACKET_TYPE_OFFSET, type);
-
-    switch(type)
-    {
-        case HCI_TYPE_DATA:
-        {
-			//
-			// We need to read the rest of data..
-			//
-			STREAM_TO_UINT16((char *)(evnt_buff + SPI_HEADER_SIZE), HCI_DATA_LENGTH_OFFSET, data_to_recv);
-			if (!((HEADERS_SIZE_EVNT + data_to_recv) & 1))
-			{
-    	        data_to_recv++;
-			}
-
-			if (data_to_recv)
-			{
-            	SpiReadDataSynchronous(evnt_buff + 10, data_to_recv);
-			}
-            break;
-        }
-        case HCI_TYPE_EVNT:
-        {
-			//
-			// Calculate the rest length of the data
-			//
-            STREAM_TO_UINT8((char *)(evnt_buff + SPI_HEADER_SIZE), HCI_EVENT_LENGTH_OFFSET, data_to_recv);
-			data_to_recv -= 1;
-
-			//
-			// Add padding byte if needed
-			//
-			if ((HEADERS_SIZE_EVNT + data_to_recv) & 1)
-			{
-
-	            data_to_recv++;
-			}
-
-			if (data_to_recv)
-			{
-            	SpiReadDataSynchronous(evnt_buff + 10, data_to_recv);
-			}
-
-			sSpiInformation.ulSpiState = eSPI_STATE_READ_EOT;
-            break;
-        }
-    }
-
-    return (0);
-}
-
-
-//*****************************************************************************
-//
-//! This function enter point for write flow
-//!
-//!  \param  SSIContReadOperation
-//!
-//!  \return none
-//!
-//!  \brief  The function triggers a user provided callback for
-//
-//*****************************************************************************
-
-void SSIContReadOperation(void)
-{
-	//
-	// The header was read - continue with  the payload read
-	//
-	if (!SpiReadDataCont())
-	{
-		//
-		// All the data was read - finalize handling by switching to the task
-		//	and calling from task Event Handler
-		//
-		SpiTriggerRxProcessing();
-	}
-}
-
-// ------------------------------------------------------------------------------------------------------------
-/*!
-    @brief Wlan_IrqIntterupt
-*/
-// ------------------------------------------------------------------------------------------------------------
-void Wlan_IrqIntterupt ( void )
-{
-
-	if (sSpiInformation.ulSpiState == eSPI_STATE_POWERUP)
-	{
-		/* This means IRQ line was low call a callback of HCI Layer to inform on event */
-		sSpiInformation.ulSpiState = eSPI_STATE_INITIALIZED;
-	}
-	else if (sSpiInformation.ulSpiState == eSPI_STATE_IDLE)
-	{
-		sSpiInformation.ulSpiState = eSPI_STATE_READ_IRQ;
-
-		/* IRQ line goes down - start reception */
-		ASSERT_CS();
-
-		//
-		// Wait for TX/RX Compete which will come as DMA interrupt
-		//
-		SpiReadHeader();
-
-		sSpiInformation.ulSpiState = eSPI_STATE_READ_EOT;
-
-		SSIContReadOperation();
-	}
-	else if (sSpiInformation.ulSpiState == eSPI_STATE_WRITE_IRQ)
-	{
-		SpiWriteDataSynchronous(sSpiInformation.pTxPacket, sSpiInformation.usTxPacketLength);
-
-		sSpiInformation.ulSpiState = eSPI_STATE_IDLE;
-
-		DEASSERT_CS();
-	}
 }
 
 

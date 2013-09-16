@@ -86,7 +86,7 @@ const CONSOLE_CMDS_STRUCT ConsoleCommands[] =
 };
 
 
-char *HCI_EVENT_STR[] =
+const char *HCI_EVENT_STR[] =
 {
 	"Socket",
 	"Bind",
@@ -107,7 +107,7 @@ char *HCI_EVENT_STR[] =
 	"mDNS Advertise"
 };
 
-char *HCI_NETAPP_STR[] =
+const char *HCI_NETAPP_STR[] =
 {
 	"DHCP",
 	"Ping Sent",
@@ -121,7 +121,7 @@ char *HCI_NETAPP_STR[] =
 };
 
 // from 0-7
-char *HCI_MISC_STR[] =
+const char *HCI_MISC_STR[] =
 {
 	"BASE - Error?",
 	"Connecting",
@@ -138,16 +138,5 @@ char *HCI_MISC_STR[] =
 	"Config Set Prefix",
 	"Config Patch",
 };
-
-/*
-// This list is displayed to help the user, line terminators are added by the help function
-const char ConsoleHelp[][] =
-{
-	{"List available commands"},
-	{"View/Configure network status"},
-	{"Connect to a wireless network"},
-	{"Disconnect from a wireless network"}
-};
-*/
 
 #endif

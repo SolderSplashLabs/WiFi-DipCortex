@@ -135,6 +135,19 @@ uint8_t *ip;
 		Wifi_AppInit(0);
 		//result = 1;
 	}
+	else if ( argc > 1 )
+	{
+		// flushdns
+		if ( argv[1][0] == 'f' )
+		{
+			ConsoleInsertPrintf("Flushing DNS Cache");
+			DnsCache_Clear();
+		}
+		else if ( argv[1][0] == 'd' )
+		{
+			DnsCache_Print();
+		}
+	}
 	else
 	{
 		cc3000Status = getCC3000Info( true );
@@ -286,25 +299,29 @@ volatile unsigned long serverIpAddr = 0;
 		{
 			serverIpAddr = inet_addr(&argv[2][0]);
 			ip = (uint8_t *)&serverIpAddr;
-			ConsoleInsertPrintf("\r\nPinging : (%d.%d.%d.%d)", ip[0], ip[1], ip[2], ip[3] );
+			ConsoleInsertPrintf("Pinging : (%d.%d.%d.%d)", ip[0], ip[1], ip[2], ip[3] );
 
 			Wifi_SendPing( serverIpAddr, 3, 32, 500 );
 		}
 		else
 		{
 			// Resolve the IP address
-			if ( gethostbyname(argv[1], strlen(argv[1]), (unsigned long *)&serverIpAddr) )
+			//if ( gethostbyname(argv[1], strlen(argv[1]), (unsigned long *)&serverIpAddr) < 0 )
+			if ( DnsCache_Query(argv[1], strlen(argv[1]), (unsigned long *)&serverIpAddr) < 0 )
 			{
-				ip = (uint8_t *)&serverIpAddr;
-				ConsoleInsertPrintf("\r\nPinging : %s (%d.%d.%d.%d)", argv[1], ip[3], ip[2], ip[1], ip[0] );
-
-				// Ping with suggested defaults
-				serverIpAddr = htonl(serverIpAddr);
-				Wifi_SendPing( serverIpAddr, 3, 32, 500 );
+				ConsoleInsertPrintf("Can not resolve IP address");
 			}
 			else
 			{
-				ConsoleInsertPrintf("\r\nCan not resolve IP address");
+				if ( serverIpAddr != 0 )
+				{
+					ip = (uint8_t *)&serverIpAddr;
+					ConsoleInsertPrintf("Pinging : %s (%d.%d.%d.%d)", argv[1], ip[3], ip[2], ip[1], ip[0] );
+
+					// Ping with suggested defaults
+					serverIpAddr = htonl(serverIpAddr);
+					Wifi_SendPing( serverIpAddr, 3, 32, 500 );
+				}
 			}
 		}
 	}
@@ -365,7 +382,7 @@ int CLI_CC3000_ReadParams (int argc, char **argv)
 	ConsolePrintf("\r\n");
 	if ( ReadParameters() )
 	{
-		ConsoleInsertPrintf("Successfully read parameters\r\n");
+		ConsoleInsertPrintf("Successfully read parameters");
 	}
 	else
 	{
@@ -501,20 +518,38 @@ uint8_t *ip;
 	ConsolePrintf("\r\n");
 	if ( Wifi_IsConnected() )
 	{
+		if ( argc > 2 )
+		{
+			if ( Dns_GetHostByName(argv[2], strlen(argv[2]), &serverIpAddr) < 0 )
+			{
+				ConsoleInsertPrintf("DNS Resolve failed");
+			}
+			else
+			{
+				ip = (uint8_t *)&serverIpAddr;
+				ConsoleInsertPrintf("Resolved : %s to : %d.%d.%d.%d", argv[2], ip[3], ip[2], ip[1], ip[0] );
+			}
+		} else
 		if ( argc > 1 )
 		{
 			ConsoleInsertPrintf("DNS Lookup : %s ... ", argv[1]);
-			if ( gethostbyname(argv[1], strlen(argv[1]), &serverIpAddr) )
+			//if ( gethostbyname(argv[1], strlen(argv[1]), &serverIpAddr) < 0)
+			if ( DnsCache_Query(argv[1], strlen(argv[1]), &serverIpAddr) < 0)
+			{
+				ConsoleInsertPrintf("DNS Resolve failed");
+			}
+			else
 			{
 				ip = (uint8_t *)&serverIpAddr;
 				ConsoleInsertPrintf("Resolved : %s to : %d.%d.%d.%d", argv[1], ip[3], ip[2], ip[1], ip[0] );
 			}
+
 			result = 1;
 		}
 	}
 	else
 	{
-		ConsoleInsertPrintf("\r\nWiFi not connected");
+		ConsoleInsertPrintf("WiFi not connected");
 		result = 1;
 	}
 	return(result);

@@ -116,12 +116,16 @@ void init(void)
 
 	Buttons_Init();
 
+	SntpInit();
+
 	// Start USB CDC Console
 	UsbCdcInit();
 
-	SntpInit();
+	// Set up the System Tick for a 1ms interrupt
+	SysTick_Config(SYSTICK);
 
 	Wifi_AppInit(0);
+
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -132,9 +136,6 @@ void init(void)
 int main(void)
 {
  	init();
-
-	// Set up the System Tick for a 1ms interrupt
-	SysTick_Config(SYSTICK);
 
 	LPC_GPIO->DIR[0] |= 0x02;
 	LPC_GPIO->CLR[0] = 0x02;
@@ -147,6 +148,7 @@ int main(void)
 
 			Buttons_Task(SYSTICKMS);
 			Wifi_Task();
+			Dns_Task();
 			SntpTask();
 			Console_Task();
 			SSUDP_Task();

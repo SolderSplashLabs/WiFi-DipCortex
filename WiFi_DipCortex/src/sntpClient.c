@@ -126,8 +126,7 @@ socklen_t tRxPacketLength;
 	{
 		if ( Wifi_IsConnected() )
 		{
-			// TODO : keep track of how long we have been waiting for so that we can adjust the result
-			// this isn't accurate! but should be good enough for must purposes
+			// TODO : this isn't accurate! but should be good enough for must purposes
 
 			retVal = recvfrom(SntpRecvSocket, SNTP_Buffer, sizeof(SNTP_Buffer), 0, (sockaddr *)&tSocketAddr, &tRxPacketLength);
 
@@ -220,14 +219,17 @@ int32_t retVal = 0;
 uint32_t SntpResolveAddress ( void )
 {
 uint32_t serverIpAddr;
+int retval = 0;
 
-	if ( gethostbyname(SystemConfig.sntpServerAddress, strlen(SystemConfig.sntpServerAddress), (unsigned long *)&serverIpAddr) )
+	retval = DnsCache_Query(SystemConfig.sntpServerAddress, strlen(SystemConfig.sntpServerAddress), (unsigned long *)&serverIpAddr);
+
+	if ( retval < 0 )
 	{
-		return( serverIpAddr );
+		return( 0 );
 	}
 	else
 	{
-		return( 0 );
+		return( serverIpAddr );
 	}
 }
 

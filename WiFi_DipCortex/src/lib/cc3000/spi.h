@@ -1,19 +1,33 @@
 typedef void (*gcSpiHandleRx)(void *p);
 typedef void (*gcSpiHandleTx)(void);
 
-extern unsigned char wlan_tx_buffer[];
+void Spi_IrqEnable ( void );
+void Spi_IrqDisable ( void );
 
-#define WLAN_IRQ_PIN_NO		16
-#define WLAN_IRQ_PIN_MASK	1<<WLAN_IRQ_PIN_NO
-#define WLAN_IRQ_PORT		1
+extern unsigned char SpiTxBuffer[];
 
 
-#define SPI_CS_PIN_NO						19
-#define SPI_CS_PIN_MASK						1<<SPI_CS_PIN_NO
-#define SPI_CS_PORT							1
+//#define SPI_IRQ_INT_EN()				( GPIOPinIntEnable( 0, 0 ) )
+//#define SPI_IRQ_INT_DIS()				( GPIOPinIntDisable( 0, 0 ) )
 
-#define ASSERT_CS()          				(LPC_GPIO->CLR[SPI_CS_PORT] = SPI_CS_PIN_MASK)
-#define DEASSERT_CS()        				(LPC_GPIO->SET[SPI_CS_PORT] = SPI_CS_PIN_MASK)
+#define WLAN_IRQ_PIN_NO					16
+#define WLAN_IRQ_PIN_MASK				1<<WLAN_IRQ_PIN_NO
+#define WLAN_IRQ_PORT					1
+#define WLAN_IRQ()						(LPC_GPIO->PIN[WLAN_IRQ_PORT] & WLAN_IRQ_PIN_NO)
+
+#define SPI_CS_PIN_NO					19
+#define SPI_CS_PIN_MASK					1<<SPI_CS_PIN_NO
+#define SPI_CS_PORT						1
+
+#define SPI_CS_ASSERT()          		(LPC_GPIO->CLR[SPI_CS_PORT] = SPI_CS_PIN_MASK)
+#define SPI_CS_DEASSERT()        		(LPC_GPIO->SET[SPI_CS_PORT] = SPI_CS_PIN_MASK)
+
+
+#define WLAN_EN_PIN_NO					15
+#define WLAN_EN_PIN_MASK				1<<WLAN_EN_PIN_NO
+#define WLAN_EN_PORT					1
+#define SPI_WLAN_EN()					(LPC_GPIO->SET[WLAN_EN_PORT] = WLAN_EN_PIN_MASK)
+#define SPI_WLAN_DIS()					(LPC_GPIO->CLR[WLAN_EN_PORT] = WLAN_EN_PIN_MASK)
 
 /* SSP Status register */
 #define SSPSR_TFE       (0x1<<0)			// Transmit FIFO Empty. This bit is 1 is the Transmit FIFO is empty, 0 if not.
@@ -93,22 +107,21 @@ long SpiWrite (unsigned char *pUserBuffer, unsigned short usLength);
 
 #ifdef _SPI_
 
+gcSpiHandleRx  SPI_HciRxFunc;
+
 typedef struct
 {
-	gcSpiHandleRx  SPIRxHandler;
-
-	unsigned short usTxPacketLength;
+	//unsigned short usTxPacketLength;
 	unsigned short usRxPacketLength;
-	unsigned long  ulSpiState;
+	//unsigned long  ulSpiState;
 	unsigned char *pTxPacket;
-	unsigned char *pRxPacket;
+	//unsigned char *pRxPacket;
 
 }tSpiInformation;
 
 tSpiInformation sSpiInformation;
 
-char spi_buffer[CC3000_RX_BUFFER_SIZE];
-unsigned char wlan_tx_buffer[CC3000_TX_BUFFER_SIZE];
+
 
 //
 // Static buffer for 5 bytes of SPI HEADER
