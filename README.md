@@ -9,9 +9,24 @@ Use a VT100 capable terminal like Putty
 
 Toolchain
 -------------------------------
-
 LPCXpresso / Code_Red v6 - Free Compiler for PC, MAC and Linux from NXP
 
+Examples
+-------------------------------
+You can use this code to learn how to do the following :
+
+* WiFi DipCortex implementation of the TI CC3000 stack
+* Smartconfig triggering
+* Ping hostnames
+* Scan for access points
+* UDP Server, polling and non blocking. Used to locate the WiFi DipCortex on your network
+* UDP Client, NTP to collect the time and DNS to resolve hostnames
+* TCP Client, Post to a webserver. Xively CSV data or Prowl for iOS notifications
+
+TODO
+-------------------------------
+* TCP Server
+* Removing more blocking code where possible
 
 License
 -------------------------------
