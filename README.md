@@ -1,14 +1,16 @@
 WiFi-Dipcortex
 ===============================
 
-Codebase for the WiFi DipCortex
+Codebase for the WiFi DipCortex - LPC1347
 
-Not Ready just yet!
+Creates a USB CDC (Serial) port, allowing control of the TI CC3000 Module 
+
+Use a VT100 capable terminal like Putty
 
 Toolchain
 -------------------------------
 
-LPCXpresso / Code_Red v5.2.4
+LPCXpresso / Code_Red v6 - Free Compiler for PC, MAC and Linux from NXP
 
 
 License
@@ -16,7 +18,6 @@ License
 
 See individual files for license info, mostly BSD
 Uses ARM/Code Red supplied CMSIS libraries please see their license terms
-
 
 
 Pin List
