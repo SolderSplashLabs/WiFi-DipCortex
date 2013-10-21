@@ -5,7 +5,7 @@ Codebase for the WiFi DipCortex - LPC1347
 
 Creates a USB CDC (Serial) port, allowing control of the TI CC3000 Module 
 
-Use a VT100 capable terminal like Putty
+Use a VT100 capable terminal like Putty. The .bin file found in the debug directory can be flashed using the built in USB bootloader
 
 Toolchain
 -------------------------------
@@ -27,6 +27,11 @@ TODO
 -------------------------------
 * TCP Server
 * Removing more blocking code where possible
+
+
+Notes
+-------------------------------
+This is an example to demonstrate the use of the CC3000 module. For more detailed info on the CC3000 module see the TI wiki http://processors.wiki.ti.com/index.php/CC3000
 
 License
 -------------------------------
