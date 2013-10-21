@@ -1,8 +1,7 @@
 
 #define HTTP_PROWL_HOSTNAME "prowl.weks.net"
 #define HTTP_PROWL_URI		"/publicapi/add"
-#define HTTP_PROWL_API_KEY	"c1099524f066abde30137c06415bca68124927fe"
-//#define HTTP_PROWL_API_KEY	"YOUR_KEY_HERE"
+#define HTTP_PROWL_API_KEY	"YOUR_KEY_HERE"
 
 void httpPut (char *hostname, char *uri, uint32_t ip);
 void httpGet (char *hostname, char *uri);
