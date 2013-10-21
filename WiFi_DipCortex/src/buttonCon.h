@@ -8,8 +8,8 @@
  (C)SolderSplash Labs 2013 - www.soldersplash.co.uk - C. Matthews - R. Steel
 
 
-	@file     SolderSplashLpc.c
-	@author   Carl Matthews (soldersplash.co.uk)
+	@file     ButtonCon.h
+	@author   C. Matthews (soldersplash.co.uk)
 	@date     01 May 2013
 
     @section LICENSE
@@ -41,98 +41,68 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
     SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-    @section DESCRIPTION
+	@section DESCRIPTION
+
+	Please Refer to user manual for IOCON register descriptions
 
 */
-void Cli_LogHciEvent ( uint16_t hciNo );
-void CLI_Init ( void );
 
-int CLI_Ipconfig (int argc, char **argv);
-int CLI_Help (int argc, char **argv);
-int CLI_WlanConnect (int argc, char **argv);
-int CLI_WlanDisconnect (int argc, char **argv);
-int CLI_WlanStatus (int argc, char **argv);
-int CLI_Udp (int argc, char **argv);
-int CLI_CC3000 (int argc, char **argv);
-int CLI_CC3000_Patch (int argc, char **argv);
-int CLI_Resolve (int argc, char **argv);
-int CLI_Http (int argc, char **argv);
-int CLI_Ping (int argc, char **argv);
-int CLI_Time (int argc, char **argv);
-int CLI_Gpio (int argc, char **argv);
+#define BUTTON_NO			1			// Number of buttons
+#define BUTTON_HELD_MS		500			// Button Held Milliseconds
+#define BUTTON_PRESSED_MS	5			// Button Pressed Milliseconds
 
-#ifdef _CLI_
-
-// This is a list of available commands
-const CONSOLE_CMDS_STRUCT ConsoleCommands[] =
+typedef struct BUTTONS
 {
-	{"?",					CLI_Help,				"List available commands"},
-	{"cc3000",				CLI_CC3000,				"cc3000 functions"},
-	{"ipconfig",			CLI_Ipconfig,			"View/Configure network status"},
-	{"connect",				CLI_WlanConnect,		"Connect to a wireless network"},
-	{"disconnect",			CLI_WlanDisconnect,		"Disconnect from a wireless network"},
-	{"status",				CLI_WlanStatus,			"wlan status"},
-	{"resolve",				CLI_Resolve,			"Resolve a hostname to an IP"},
-	{"udp",					CLI_Udp,				"UDP Control"},
-	{"http",				CLI_Http,				"http post"},
-	{"ping",				CLI_Ping,				"Ping"},
-	{"time",				CLI_Time,				"Get/Set Time"},
-	{"gpio",				CLI_Gpio,				"Control GPIO"},
-	{0,0}
+	uint8_t	Port;
+	uint8_t	Pin;
+	uint32_t Mask;
+} BUTTONS;
+
+#define BUTTON1_PIN_NO		1
+#define BUTTON1_PIN_MASK	1<<BUTTON1_PIN_NO
+#define BUTTON1_PORT		0
+// Select : PIO, Hysteresis, pull up enabled
+#define BUTTON1_IOCON		{LPC_IOCON->PIO0_1 = (0 | 1<<5 | 1<<4 );}
+
+#define BUTTON2_PIN_NO		17
+#define BUTTON2_PIN_MASK	1<<BUTTON2_PIN_NO
+#define BUTTON2_PORT		0
+// Select : PIO, Hysteresis, pull up enabled
+#define BUTTON2_IOCON		{LPC_IOCON->PIO0_17 = (0 | 1<<5 | 1<<4 );}
+
+
+// Mask used on pressed return byte
+#define BUTTON1				BIT0
+#define BUTTON2				BIT1
+#define BUTTON3				BIT2
+#define BUTTON4				BIT3
+#define BUTTON5				BIT4
+#define BUTTON6				BIT5
+
+void Buttons_ActionPressed ( void );
+void Buttons_GetPressed ( uint8_t *pressed );
+void Buttons_GetHeld ( uint8_t *pressed );
+void Buttons_GetPrevState ( uint8_t *buttonsState );
+void Buttons_Init ( void );
+void Buttons_Task ( uint32_t msCallRate );
+
+#ifdef _BUTTONS_
+
+const BUTTONS Buttons[BUTTON_NO] =
+{
+		{BUTTON1_PORT, BUTTON1_PIN_NO, BUTTON1_PIN_MASK},
+		/*{BUTTON2_PORT, BUTTON2_PIN_NO, BUTTON2_PIN_MASK},
+		{BUTTON3_PORT, BUTTON3_PIN, BUTTON3_MASK},
+		{BUTTON4_PORT, BUTTON4_PIN, BUTTON4_MASK},
+		{BUTTON5_PORT, BUTTON5_PIN, BUTTON5_MASK},
+		{BUTTON6_PORT, BUTTON6_PIN, BUTTON6_MASK}*/
 };
 
 
-const char *HCI_EVENT_STR[] =
-{
-	"Socket",
-	"Bind",
-	"Send",
-	"Recv",
-	"Accept",
-	"Listen",
-	"Connect",
-	"BSD Select",
-	"Set Socket Options",
-	"Get Socket Options",
-	"Close Socket",
-	"Unknown",
-	"Recv From",
-	"Write",
-	"Send To",
-	"Get Hostname",
-	"mDNS Advertise"
-};
+volatile uint8_t ButtonsPressed;
+volatile uint8_t ButtonsHeld;
+volatile uint8_t ButtonsPrevState;
+uint16_t ButtonHeldCnt[BUTTON_NO] = {0};
 
-const char *HCI_NETAPP_STR[] =
-{
-	"DHCP",
-	"Ping Sent",
-	"Ping Report",
-	"Ping Stop",
-	"IP Config",
-	"ARP Flush",
-	"Unknown",
-	"Set Debug level",
-	"Set Timers"
-};
-
-// from 0-7
-const char *HCI_MISC_STR[] =
-{
-	"BASE - Error?",
-	"Connecting",
-	"Disconnect",
-	"Scan Param",
-	"Connect Policy",
-	"Add Profile",
-	"Del Profile",
-	"Get Scan Res",
-	"Event Mask",
-	"Status Req",
-	"Config Start",
-	"Config Stop",
-	"Config Set Prefix",
-	"Config Patch",
-};
 
 #endif

@@ -56,8 +56,10 @@
 #include "cc3000\spi.h"
 #include "SystemConfig.h"
 #include "buttonCon.h"
-
-#include "SolderSplashUdp.h"
+#include "sntpClient.h"
+#include "udpServer.h"
+#include "dns.h"
+#include "http.h"
 
 #define _WIFI_APP_
 #include "wifi_app.h"
@@ -80,22 +82,28 @@ uint8_t pressed;
 		{
 			cc3000Status = getCC3000Info( false );
 			SntpUpdate( false );
-			SSUDP_Listen();
-
+			UdpServer_Listen();
 			IpConfRequested = true;
 		}
 
-		if (( pressed & BUTTON1 ) || ( pressed & BUTTON2 ))
+		if ( pressed & BUTTON1 )
 		{
 			httpPostProwl("Button Press", "Someone pressed the button!");
 		}
 	}
+	else
+	{
+		// Make sure the UDP Server is shutdown
+		UdpServer_Close();
+		IpConfRequested = false;
+	}
 
 	Buttons_GetHeld(&pressed);
 
-	if (( pressed & BUTTON3 ) && ( pressed & BUTTON2 ))
+	if ( pressed & BUTTON1 )
 	{
-		// NVIC_SystemReset();
+		// Button1 is also the USB boot button, so holding it while we reset puts us in bootloader mode
+		NVIC_SystemReset();
 	}
 
 	Buttons_ActionPressed();
@@ -113,6 +121,12 @@ unsigned long ipAddr = 0;
 	// SPI Init
 	SpiInit();
 
+	ulCC3000Connected = 0;
+	ulCC3000DHCP = 0;
+	IpConfDataCached = false;
+	Dns_RefreshServerIp();
+	UdpServer_Close();
+
 	LPC_GPIO->DIR[WLAN_IRQ_PORT] &= ~(WLAN_IRQ_PIN_MASK);
 
 	// EN as output, high to enable
@@ -129,10 +143,11 @@ unsigned long ipAddr = 0;
 
 	if ( SystemConfig.flags.StaticIp )
 	{
-		netapp_dhcp(&SystemConfig.ulStaticIP, &SystemConfig.ulSubnetMask, &SystemConfig.ulGatewayIP, &SystemConfig.ulGatewayIP );
+		netapp_dhcp((unsigned long *)&SystemConfig.ulStaticIP, (unsigned long *)&SystemConfig.ulSubnetMask, (unsigned long *)&SystemConfig.ulGatewayIP, (unsigned long *)&SystemConfig.ulDnsServer );
 	}
 	else
 	{
+		// all zeros, enables DHCP
 		netapp_dhcp(&ipAddr, &ipAddr, &ipAddr, &ipAddr);
 	}
 
@@ -148,7 +163,18 @@ unsigned long ipAddr = 0;
 	netapp_timeout_values( (unsigned long *)&WIFI_DHCP_TIMEOUT, (unsigned long *)&WIFI_ARP_TIMEOUT, (unsigned long *)&WIFI_KEEPALIVE_TIMEOUT, (unsigned long *)&WIFI_INACTIVITY_TIMEOUT );
 
 	// Init soldersplash UDP coms
-	SSUDP_Init();
+	UdpServer_Init();
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+    @brief Wifi_StartAutoConnect
+*/
+// ------------------------------------------------------------------------------------------------------------
+void Wifi_StartAutoConnect ( void )
+{
+	// Fast connect, use profiles
+	wlan_ioctl_set_connection_policy(0, 1, 1);
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -170,7 +196,7 @@ bool Wifi_IsConnected ( void )
 
 // ------------------------------------------------------------------------------------------------------------
 /*!
-    @brief PIN_INT0_IRQHandler - IRQ Intterupt on change
+    @brief PIN_INT0_IRQHandler - IRQ Interrupt on change we pass this on to the TI library
 */
 // ------------------------------------------------------------------------------------------------------------
 void PIN_INT0_IRQHandler ( void )
@@ -235,7 +261,7 @@ void CC3000_UsynchCallback(long lEventType, char * data, unsigned char length)
 
 		case HCI_EVNT_WLAN_ASYNC_PING_REPORT :
 			ConsoleInsertPrintf("Callback : Recvd Ping!");
-			WifiPingReport = data;
+			WifiPingReport = (netapp_pingreport_args_t *)data;
 
 			ConsoleInsertPrintf("Ping Results : Min ( %d ) Max ( %d ) Average ( %d )", WifiPingReport->min_round_time, WifiPingReport->max_round_time, WifiPingReport->avg_round_time);
 		break;
@@ -403,7 +429,7 @@ volatile uint8_t *pRMParams;
 bool result = true;
 
 	// read MAC address
-	if (! nvmem_get_mac_address(cMacFromEeprom) )
+	if (! nvmem_get_mac_address((unsigned char *)cMacFromEeprom) )
 	{
 		status = 1;
 
@@ -418,7 +444,7 @@ bool result = true;
 			// TODO : for some reason a single 128byte read hard faults!
 			for (index = 0; index < 2; index++)
 			{
-				status |= nvmem_read(NVMEM_RM_FILEID, 64, 64*index, pRMParams);
+				status |= nvmem_read(NVMEM_RM_FILEID, 64, 64*index, (unsigned char *)pRMParams);
 				pRMParams += 64;
 			}
 
@@ -464,6 +490,7 @@ void StartSmartConfig(void)
 	ulSmartConfigFinished = 0;
 	ulCC3000Connected = 0;
 	ulCC3000DHCP = 0;
+	IpConfDataCached = false;
 	OkToDoShutDown=0;
 
 	// Reset all the previous configuration
@@ -472,8 +499,7 @@ void StartSmartConfig(void)
 	//Wait until CC3000 is disconnected
 	while (ulCC3000Connected == 1)
 	{
-		//__delay_cycles(1000);
-		__WFI();
+		DelayUs(5000);
 	}
 
 	// Trigger the Smart Config process
@@ -485,11 +511,8 @@ void StartSmartConfig(void)
 	// Wait for Smartconfig process complete
 	while (ulSmartConfigFinished == 0)
 	{
-
-		//__delay_cycles(6000000);
-		__WFI();
-		__WFI();
-		//__delay_cycles(6000000);
+		DelayUs(5000);
+		// TODO : Rewrite this so that it is non-blocking
 	}
 #ifndef CC3000_UNENCRYPTED_SMART_CONFIG
 	// create new entry for AES encryption key
@@ -534,7 +557,7 @@ const uint32_t uiDefaultTxPower = 205;
 const uint32_t aiIntervalList[16] = { 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000 };
 
 	// if millseconds = 1 that's a 10 minute scan!
-	wlan_ioctl_set_scan_params(millseconds, uiMinDwellTime,	uiMaxDwellTime,	uiNumOfProbeRequests, uiChannelMask, iRSSIThreshold, uiSNRThreshold, uiDefaultTxPower, aiIntervalList);
+	wlan_ioctl_set_scan_params(millseconds, uiMinDwellTime,	uiMaxDwellTime,	uiNumOfProbeRequests, uiChannelMask, iRSSIThreshold, uiSNRThreshold, uiDefaultTxPower, (unsigned long *)aiIntervalList);
 
 }
 
@@ -549,6 +572,7 @@ uint8_t i = 0;
 uint8_t encryptionType = 0;
 uint8_t ssidLen = 0;
 ResultStruct_t scanResults;
+int8_t tempRssi = 0;
 
 	wlan_ioctl_get_scan_results(0, (uint8_t*)&scanResults);
 	ConsoleInsertPrintf("Scan found %u WiFi networks", scanResults.num_networks);
@@ -571,8 +595,10 @@ ResultStruct_t scanResults;
 				scanResults.ssid_name[ ssidLen ] = 0;
 			}
 
+			tempRssi = (0x80 | scanResults.rssiByte);
+
 			//ConsoleInsertPrintf("%s (%s) RSSI (%d) Age (%d)", scanResults.ssid_name, WIFI_SEC_TYPE[encryptionType], scanResults.rssiByte, scanResults.time);
-			ConsoleInsertPrintf("%s (%s) RSSI (%d)", scanResults.ssid_name, WIFI_SEC_TYPE[encryptionType], scanResults.rssiByte);
+			ConsoleInsertPrintf("%s (%s) RSSI (%d, %d dBm)", scanResults.ssid_name, WIFI_SEC_TYPE[encryptionType], scanResults.rssiByte, tempRssi);
 		}
 		wlan_ioctl_get_scan_results(0, (uint8_t*)&scanResults);
 
@@ -587,6 +613,6 @@ ResultStruct_t scanResults;
 // ------------------------------------------------------------------------------------------------------------
 void Wifi_SendPing ( uint32_t ip, uint32_t attempts, uint32_t packetsize, uint32_t timeout)
 {
-	netapp_ping_send(&ip, attempts, packetsize, timeout);
+	netapp_ping_send((unsigned long *)&ip, attempts, packetsize, timeout);
 }
 

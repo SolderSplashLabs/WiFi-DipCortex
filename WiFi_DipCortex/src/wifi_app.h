@@ -27,6 +27,7 @@ void Wifi_GetScanResults ( void );
 void Wifi_SendPing ( uint32_t ip, uint32_t attempts, uint32_t packetsize, uint32_t timeout);
 void Wifi_StartScan ( uint32_t millseconds );
 void StartSmartConfig(void);
+void Wifi_StartAutoConnect ( void );
 
 #ifdef _WIFI_APP_
 
@@ -34,7 +35,7 @@ typedef struct Result_Struct
 {
   uint32_t  num_networks;
   uint32_t  scan_status;
-  uint8_t 	valid:1;
+  uint8_t 	valid:1;			// Note : this works in LpcXpresso, but structure packing depends on the compiler!, valid bit is bit0 LSB
   uint8_t  	rssiByte:7;
   uint8_t   Sec_ssidLen;
   uint16_t  time;

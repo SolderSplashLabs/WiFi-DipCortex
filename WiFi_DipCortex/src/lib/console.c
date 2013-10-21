@@ -335,7 +335,7 @@ void Console_Init ( CONSOLE_CMDS_STRUCT *appCommandList )
 void ConsoleVPrintf(const char *format, va_list args)
 {
 	vsnprintf(&outstring[0], sizeof(outstring), format, args);
-	UsbCdcTxFifo_AddBytes((uint8_t *)&outstring[0], strlen(outstring));
+	UsbCdcTxFifo_AddBytes((char *)&outstring[0], strlen(outstring));
 }
 
 

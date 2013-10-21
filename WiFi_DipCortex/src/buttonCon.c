@@ -8,7 +8,7 @@
  (C)SolderSplash Labs 2013 - www.soldersplash.co.uk - C. Matthews - R. Steel
 
 
-	@file     SolderSplashLpc.c
+	@file     main.c
 	@author   Carl Matthews (soldersplash.co.uk)
 	@date     01 May 2013
 
@@ -41,200 +41,160 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
     SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-    @section DESCRIPTION
 
-    PWM Control of 6 outputs
+	@section DESCRIPTION
+
 */
 
 #include "SolderSplashLpc.h"
 
-#define _PWM_CON_
-#include "pwmControl.h"
-
-// -------------------------------------------------------------------------------------------
-// Pwm_Init
-// Initalise the PWM port
-// -------------------------------------------------------------------------------------------
-void Pwm_Init ( void )
-{
-	// Enable the CT32B0, CT32B1 & CT16B0 peripherals
-	LPC_SYSCON->SYSAHBCLKCTRL |= (1<<9) | (1<<10) | (1<<7);
-
-	// Configure match pins - see header file
-	PWM1_IOCON;
-	PWM2_IOCON;
-	PWM3_IOCON;
-
-	// Toggle match GPIO on timer match
-	LPC_CT32B0->EMR = (0xFF<<4);
-	LPC_CT32B1->EMR = (0xFF<<4);
-
-	// Interrupt and reset on MR2
-	LPC_CT32B0->MCR = 1<<6 | 1<<7;
-
-	// Interrupt and reset on MR2
-	LPC_CT32B1->MCR = 1<<6 | 1<<7;
-
-	Pwm_SetDuty( 0xFF, PWM_DEFAULT_PERIOD/2 );
-
-	// Use MR3 as our Period register
-	LPC_CT32B0->MR2 = PWM_DEFAULT_PERIOD;
-	LPC_CT32B1->MR2 = PWM_DEFAULT_PERIOD;
-
-	LPC_CT32B0->PR = PWM_PRESCALE;
-	LPC_CT32B1->PR = PWM_PRESCALE;
-
-	LPC_CT32B0->PWMC = 0x000B;
-	LPC_CT32B1->PWMC = 0x000B;
-}
+#define _BUTTONS_
+#include "ButtonCon.h"
 
 // -------------------------------------------------------------------------------------------
 /*!
-    @brief Modify the duty of the masked PWM channels
+    @brief 	Buttons_Task - Call this at a rate you would like to detect a button press,
+			will record a press on a high to low transition
 */
 // -------------------------------------------------------------------------------------------
-void Pwm_SetDuty ( uint8_t pwmMask, uint32_t duty )
-{
-	if ( pwmMask & BIT0 )
-	{
-		*PWM1_DUTY_REG = duty;
-	}
-
-	if ( pwmMask & BIT1 )
-	{
-		*PWM2_DUTY_REG = duty;
-	}
-
-	if ( pwmMask & BIT2 )
-	{
-		*PWM3_DUTY_REG = duty;
-	}
-}
-
-// -------------------------------------------------------------------------------------------
-/*!
-    @brief Pwm_GetFreq
-*/
-// -------------------------------------------------------------------------------------------
-uint32_t Pwm_GetFreq ( void )
-{
-	return(PWM_DEFAULT_PERIOD);
-}
-
-// -------------------------------------------------------------------------------------------
-/*!
-    @brief Increase the duty of the masked PWM channels
-*/
-// -------------------------------------------------------------------------------------------
-void Pwm_DutyIncrease ( uint8_t pwmMask, uint32_t maxDuty )
+void Buttons_Task ( uint32_t msCallRate )
 {
 uint8_t i = 0;
-uint8_t mask = 0x01;
+uint8_t mask = 1;
+uint8_t buttonState = 0;
 
-	for (i=0; i<PWM_NO_OF; i++)
+	buttonState = ButtonsPrevState;
+
+	for (i=0; i<BUTTON_NO; i++)
 	{
-		if ( pwmMask & mask )
+		if ( LPC_GPIO->PIN[Buttons[i].Port] & Buttons[i].Mask )
 		{
-			if ( *(Pwm_Duty[i]) < maxDuty )
+			// High - the default state of the input
+
+			if (! (buttonState & mask))
 			{
-				*Pwm_Duty[i] = *Pwm_Duty[i] + 1;
+				// Just transitioned to high from low
+				if (ButtonsHeld & mask)
+				{
+					// Button was held
+					ButtonsHeld &= ~mask;
+				}
+				else
+				{
+					// Wasn't held, but was it long enough for a press
+					if (ButtonHeldCnt[i] >= BUTTON_PRESSED_MS)
+					{
+						ButtonsPressed |= mask;
+					}
+				}
 			}
+
+			// Update Prev State
+			buttonState |= mask;
 		}
-		mask <<= 1;
-	}
-}
-
-// -------------------------------------------------------------------------------------------
-/*!
-    @brief Decrease the duty of the masked PWM channels
-*/
-// -------------------------------------------------------------------------------------------
-void Pwm_DutyDecrease ( uint8_t pwmMask, uint32_t minDuty )
-{
-uint8_t i = 0;
-uint8_t mask = 0x01;
-
-	for (i=0; i<PWM_NO_OF; i++)
-	{
-		if ( pwmMask & mask )
+		else
 		{
-			if ( *(Pwm_Duty[i]) > minDuty )
+			if (buttonState & mask)
 			{
-				*Pwm_Duty[i] = *Pwm_Duty[i] - 1;
-			}
-		}
-		mask <<= 1;
-	}
-}
-
-// -------------------------------------------------------------------------------------------
-/*!
-    @brief Pwm_DutyStep - Move towards the target duty 1 count at a time
-    // TODO : Allow a varible step size later
-*/
-// -------------------------------------------------------------------------------------------
-void Pwm_DutyStep ( uint8_t pwmMask, uint32_t targetDuty )
-{
-uint8_t i = 0;
-uint8_t mask = 0x01;
-
-	for (i=0; i<PWM_NO_OF; i++)
-	{
-		if ( pwmMask & mask )
-		{
-			if ( *(Pwm_Duty[i]) < targetDuty )
-			{
-				*(Pwm_Duty[i]) = *(Pwm_Duty[i]) + 1;
-			}
-			else if ( *(Pwm_Duty[i]) > targetDuty )
-			{
-				*(Pwm_Duty[i]) = *(Pwm_Duty[i]) - 1;
+				// Was high now low
+				ButtonHeldCnt[i] = 0;
 			}
 			else
 			{
-				// it's where it needs to be
+				if (ButtonHeldCnt[i] < BUTTON_HELD_MS)
+				{
+					ButtonHeldCnt[i] += msCallRate;
+					/*
+					if (ButtonHeldCnt[i] == BUTTON_PRESSED_MS)
+					{
+						newButtonsPressed |= mask;
+					}
+					*/
+				}
+				else
+				{
+					// Declare the button as held
+					ButtonsHeld |= mask;
+				}
 			}
+
+			// Update Prev State
+			buttonState &= ~mask;
 		}
+
 		mask <<= 1;
 	}
+
+	ButtonsPrevState = buttonState;
 }
 
 // -------------------------------------------------------------------------------------------
 /*!
-    @brief Return the duty from the selected channel
+    @brief 	Buttons_ActionPressed - clear the pressed button mask
 */
 // -------------------------------------------------------------------------------------------
-uint32_t Pwm_GetDuty ( uint8_t channel )
+void Buttons_ActionPressed ( void )
 {
-uint32_t result = 0;
+    ButtonsPressed = 0;
+}
 
-	if ( channel < PWM_NO_OF )
+// -------------------------------------------------------------------------------------------
+/*!
+	@brief 	Buttons_GetPressed - returns a bit mask of pressed buttons
+*/
+// -------------------------------------------------------------------------------------------
+void Buttons_GetPressed ( uint8_t *pressed )
+{
+    *pressed = ButtonsPressed;
+}
+
+// -------------------------------------------------------------------------------------------
+/*!
+	@brief 	Buttons_GetPrevState - returns the last state of the buttons
+*/
+// -------------------------------------------------------------------------------------------
+void Buttons_GetPrevState ( uint8_t *buttonsState )
+{
+    *buttonsState = ButtonsPrevState;
+}
+
+// -------------------------------------------------------------------------------------------
+/*!
+	@brief 	Buttons_GetHeld - returns a bit mask of held buttons
+*/
+// -------------------------------------------------------------------------------------------
+void Buttons_GetHeld ( uint8_t *pressed )
+{
+    *pressed = ButtonsHeld;
+}
+
+// -------------------------------------------------------------------------------------------
+/*!
+	@brief 	Buttons_Init - Set up GPIO
+*/
+// -------------------------------------------------------------------------------------------
+void Buttons_Init( void )
+{
+uint8_t i = 0;
+
+	// Configure IOCON registers for the 6 buttons
+	BUTTON1_IOCON;
+	/*
+	BUTTON2_IOCON;
+	BUTTON3_IOCON;
+	BUTTON3_IOCON;
+	BUTTON4_IOCON;
+	BUTTON5_IOCON;
+	BUTTON6_IOCON;
+	*/
+
+	for (i=0; i<BUTTON_NO; i++)
 	{
-		result = *Pwm_Duty[channel];
+		// Set buttons as GP inputs
+		LPC_GPIO->DIR[Buttons[i].Port] &= ~(1<<Buttons[i].Pin);
+		ButtonHeldCnt[0] = 0;
 	}
-
-	return result;
 }
 
-// -------------------------------------------------------------------------------------------
-/*!
-    @brief Timer32-1 Interrupt
-*/
-// -------------------------------------------------------------------------------------------
-void TIMER32_1_IRQHandler(void)
-{
-	// Clear all interrupts
-	LPC_CT32B1->IR  = 0xff;
-}
 
-// -------------------------------------------------------------------------------------------
-/*!
-    @brief Enable all PWMs
-*/
-// -------------------------------------------------------------------------------------------
-void Pwm_On ( void )
-{
-	// GO!
-	LPC_CT32B0->TCR = 1;
-	LPC_CT32B1->TCR = 1;
-}
+

@@ -3,11 +3,11 @@
 #define PWM_PRESCALE				1			// Clock Ticks are needed before incrementing the count register
 
 
-#define PWM_NO_OF		3
+#define PWM_NO_OF					3
 
-#define	PWM_MASK_RED		1
-#define	PWM_MASK_GREEN		2
-#define	PWM_MASK_BLUE		4
+#define	PWM_MASK_RED				1
+#define	PWM_MASK_GREEN				2
+#define	PWM_MASK_BLUE				4
 
 // Green - CT32B1_MAT0
 #define PWM1_PORT		0
@@ -40,6 +40,7 @@ void Pwm_SetDuty ( uint8_t pwmMask, uint32_t duty );
 void Pwm_On ( void );
 void Pwm_DutyIncrease ( uint8_t pwmMask, uint32_t maxDuty );
 void Pwm_DutyDecrease ( uint8_t pwmMask, uint32_t minDuty );
+uint32_t Pwm_GetFreq ( void );
 
 uint32_t Pwm_GetDuty ( uint8_t channel );
 

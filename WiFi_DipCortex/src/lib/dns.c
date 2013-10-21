@@ -53,12 +53,14 @@
 #include "cc3000_headers.h"
 
 #include "SolderSplashLpc.h"
+#include "dns.h"
 #include "dnsCache.h"
+#include "console.h"
+#include "wifi_app.h"
+#include "timeManager.h"
 
-#define DNS_HEADER_SIZE					12
-#define DNS_PORT_NO						53
 
-// DNS Reply's can be up to 512 bytes long
+// DNS Reply's can be up to 512 bytes long, but we can get what we need with a smaller buffer
 uint8_t DnsDataBuffer[150];
 unsigned long DnsSocket = 0xFFFFFFFF;
 uint32_t DnsServerIp = 0;
@@ -66,21 +68,38 @@ uint32_t DnsListenStarted = 0;
 
 // ------------------------------------------------------------------------------------------------------------
 /*!
-	@brief Dns_Task
+	@brief gets the DNS Server address if it is not set
 */
 // ------------------------------------------------------------------------------------------------------------
 void Dns_Task ( void )
 {
 volatile tNetappIpconfigRetArgs *cc3000Status;
 
-	if (! DnsServerIp )
+	if ( Wifi_IsConnected() )
 	{
-		if ( Wifi_IsConnected() )
+		if (! DnsServerIp )
 		{
-			cc3000Status = getCC3000Info( true );
-			DnsServerIp = *((uint32_t *)cc3000Status->aucDNSServer);
+			if ( Wifi_IsConnected() )
+			{
+				cc3000Status = getCC3000Info( true );
+				DnsServerIp = *((uint32_t *)cc3000Status->aucDNSServer);
+			}
 		}
 	}
+	else
+	{
+		DnsServerIp = 0;
+	}
+}
+
+// ------------------------------------------------------------------------------------------------------------
+/*!
+	@brief force a refresh of the server IP by invalidating it
+*/
+// ------------------------------------------------------------------------------------------------------------
+void Dns_RefreshServerIp ( void )
+{
+	DnsServerIp = 0;
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -356,5 +375,4 @@ uint8_t count = 0;
 
 	return ( result );
 }
-
 

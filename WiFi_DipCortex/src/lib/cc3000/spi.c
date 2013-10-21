@@ -229,12 +229,12 @@ long SpiWrite (unsigned char *pUserBuffer, unsigned short usLength)
 		SPI_CS_ASSERT();
 
 		// It also requires a slight delay, i hate fixed delays but this is easiest for now
-		DelayUs(10);
+		DelayUs(50);
 
 		Spi_WriteBuffer( &SpiTxBuffer[0], 4 );
 
 		// Special delay required when first communicating with the module
-		DelayUs(10);
+		DelayUs(50);
 
 		// Then write the rest of the data
 		Spi_WriteBuffer(&SpiTxBuffer[4], SpiWriteLen-4);
@@ -336,43 +336,6 @@ void Spi_ReadIntoBuffer(uint8_t *data, uint16_t size)
 		data[i] = LPC_SSP1->DR;
     }
 }
-
-
-// ------------------------------------------------------------------------------------------------------------
-/*!
-    @brief Spi_HciWrite - Called to write an HCI message to the SPI Bus by the interrupt
-*/
-// ------------------------------------------------------------------------------------------------------------
-
-/*
-void Spi_HciWrite ( uint8_t *buffer, uint16_t len )
-{
-uint16_t hciWritePos = 0;
-
-    //SerialPort.printf("HCI SPI Writing\r\n");
-
-    // Null pointer & length check
-    if (( buffer ) && ( len ))
-    {
-        hciWritePos = 0;
-
-        if ( SPI_STATE_INITIALISING == SpiCurrentState )
-        {
-        	Spi_WriteBuffer( buffer, 4 );
-
-            hciWritePos = 4;
-
-            // Special delay required when first communicating with the module
-            DelayUs(50);
-        }
-
-        if ( hciWritePos < len )
-        {
-        	Spi_WriteBuffer( &buffer[hciWritePos], len-4 );
-        }
-    }
-}
-*/
 
 // ------------------------------------------------------------------------------------------------------------
 /*!
@@ -528,12 +491,10 @@ void Spi_EnableModule ( bool enable )
     if ( enable )
     {
         // Enable the CC3000 Module
-        //SerialPort.printf("Enabling the CC3000 Module\r\n");
     	SPI_WLAN_EN();
     }
     else
     {
-        //SerialPort.printf("Disabling the CC3000 Module\r\n");
     	SPI_WLAN_DIS();
     }
 }
@@ -583,8 +544,8 @@ volatile uint32_t data;
 	// CPHA = 1, Data captured on falling edge of the clock
 	// CPOL = 0, Clock Low between frames, and SCR is 3 ( 4clocks - 1 )
 	// SCR = 2, 36Mhz/(2+1) = 12Mhz Clock rate
-	//LPC_SSP1->CR0 = 0 | 0x7 | SSPCR0_SPH | 0x0200;
-	LPC_SSP1->CR0 = 0 | 0x7 | SSPCR0_SPH | 0x0300;
+	LPC_SSP1->CR0 = 0 | 0x7 | SSPCR0_SPH | 0x0200;
+	//LPC_SSP1->CR0 = 0 | 0x7 | SSPCR0_SPH | 0x0300;
 
 	// Manual CS
 	LPC_GPIO->DIR[SPI_CS_PORT] |= SPI_CS_PIN_MASK;

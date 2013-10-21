@@ -43,6 +43,7 @@
 
     @section DESCRIPTION
 
+	stores recent DNS results in a list with a timestamp so old entries can be removed or replaced
 
 */
 
@@ -51,20 +52,13 @@
 #include <stdarg.h>
 
 #include "SolderSplashLpc.h"
+#include "cc3000_headers.h"
+#include "console.h"
+#include "timeManager.h"
+#include "dns.h"
 
 #define _DNS_CACHE_
 #include "dnsCache.h"
-
-// ------------------------------------------------------------------------------------------------------------
-/*!
-	@brief Used to age the cached records so we know if we can use them or not
-*/
-// ------------------------------------------------------------------------------------------------------------
-void DnsCache_Task ( void )
-{
-uint8_t i = 0;
-
-}
 
 // ------------------------------------------------------------------------------------------------------------
 /*!
@@ -95,6 +89,7 @@ uint8_t i = 0;
 int8_t result = -1;
 uint8_t updateRecordNo = 0;
 uint32_t oldestEntry = 0xffffffff;
+int gethostret = 0;
 
 	// Check the pointers have been set and the length is valid
 	if (( strHostname ) && ( ipAddress ))
@@ -133,8 +128,11 @@ uint32_t oldestEntry = 0xffffffff;
 			attempts = 0;
 			while ( attempts < 3 )
 			{
-				if ( gethostbyname(strHostname, hostnameLen, ipAddress) < 0)
+				gethostret = gethostbyname(strHostname, hostnameLen, ipAddress);
+				if ( gethostret < 0)
 				{
+					ConsoleInsertPrintf("DNS Resolve failed - Return Code %d", gethostret);
+
 					// Failed to resolve the hostname
 					attempts ++;
 				}
@@ -199,7 +197,7 @@ uint8_t *ip;
 	{
 		if ( DnsCache[i].hostname[0] )
 		{
-			ip = &DnsCache[i].ipAddress;
+			ip = (uint8_t *)&DnsCache[i].ipAddress;
 			ConsoleInsertPrintf("%s - IP %d.%d.%d.%d - Seconds old %u", (char *)&DnsCache[i].hostname[0], ip[3], ip[2], ip[1], ip[0], (Time_Uptime() - DnsCache[i].updatedTimestamp));
 		}
 	}

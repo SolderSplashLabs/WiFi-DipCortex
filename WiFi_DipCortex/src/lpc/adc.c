@@ -8,9 +8,9 @@
  (C)SolderSplash Labs 2013 - www.soldersplash.co.uk - C. Matthews - R. Steel
 
 
-	@file     SolderSplashLpc.c
+	@file     adc.c
 	@author   Carl Matthews (soldersplash.co.uk)
-	@date     01 May 2013
+	@date     01 sep 2013
 
     @section LICENSE
 
@@ -41,98 +41,8 @@
     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
     SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-    @section DESCRIPTION
+
+	@section DESCRIPTION
 
 */
-void Cli_LogHciEvent ( uint16_t hciNo );
-void CLI_Init ( void );
 
-int CLI_Ipconfig (int argc, char **argv);
-int CLI_Help (int argc, char **argv);
-int CLI_WlanConnect (int argc, char **argv);
-int CLI_WlanDisconnect (int argc, char **argv);
-int CLI_WlanStatus (int argc, char **argv);
-int CLI_Udp (int argc, char **argv);
-int CLI_CC3000 (int argc, char **argv);
-int CLI_CC3000_Patch (int argc, char **argv);
-int CLI_Resolve (int argc, char **argv);
-int CLI_Http (int argc, char **argv);
-int CLI_Ping (int argc, char **argv);
-int CLI_Time (int argc, char **argv);
-int CLI_Gpio (int argc, char **argv);
-
-#ifdef _CLI_
-
-// This is a list of available commands
-const CONSOLE_CMDS_STRUCT ConsoleCommands[] =
-{
-	{"?",					CLI_Help,				"List available commands"},
-	{"cc3000",				CLI_CC3000,				"cc3000 functions"},
-	{"ipconfig",			CLI_Ipconfig,			"View/Configure network status"},
-	{"connect",				CLI_WlanConnect,		"Connect to a wireless network"},
-	{"disconnect",			CLI_WlanDisconnect,		"Disconnect from a wireless network"},
-	{"status",				CLI_WlanStatus,			"wlan status"},
-	{"resolve",				CLI_Resolve,			"Resolve a hostname to an IP"},
-	{"udp",					CLI_Udp,				"UDP Control"},
-	{"http",				CLI_Http,				"http post"},
-	{"ping",				CLI_Ping,				"Ping"},
-	{"time",				CLI_Time,				"Get/Set Time"},
-	{"gpio",				CLI_Gpio,				"Control GPIO"},
-	{0,0}
-};
-
-
-const char *HCI_EVENT_STR[] =
-{
-	"Socket",
-	"Bind",
-	"Send",
-	"Recv",
-	"Accept",
-	"Listen",
-	"Connect",
-	"BSD Select",
-	"Set Socket Options",
-	"Get Socket Options",
-	"Close Socket",
-	"Unknown",
-	"Recv From",
-	"Write",
-	"Send To",
-	"Get Hostname",
-	"mDNS Advertise"
-};
-
-const char *HCI_NETAPP_STR[] =
-{
-	"DHCP",
-	"Ping Sent",
-	"Ping Report",
-	"Ping Stop",
-	"IP Config",
-	"ARP Flush",
-	"Unknown",
-	"Set Debug level",
-	"Set Timers"
-};
-
-// from 0-7
-const char *HCI_MISC_STR[] =
-{
-	"BASE - Error?",
-	"Connecting",
-	"Disconnect",
-	"Scan Param",
-	"Connect Policy",
-	"Add Profile",
-	"Del Profile",
-	"Get Scan Res",
-	"Event Mask",
-	"Status Req",
-	"Config Start",
-	"Config Stop",
-	"Config Set Prefix",
-	"Config Patch",
-};
-
-#endif

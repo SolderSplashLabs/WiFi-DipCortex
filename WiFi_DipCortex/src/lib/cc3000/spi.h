@@ -3,6 +3,8 @@ typedef void (*gcSpiHandleTx)(void);
 
 void Spi_IrqEnable ( void );
 void Spi_IrqDisable ( void );
+void Spi_IrqInterrupt( void );
+void Spi_WriteBuffer(uint8_t *data, uint16_t size);
 
 extern unsigned char SpiTxBuffer[];
 

@@ -52,6 +52,8 @@
 #include "netapp.h"
 #include "spi.h"
 
+#include "timeManager.h"
+#include "cli.h"
  
 
 //*****************************************************************************
@@ -470,7 +472,7 @@ uint32_t startUptime = Time_Uptime();
 				{
 					while(1);
 					{
-						// WTF
+						// We dont want to memcpy to a null pointer!
 						__NOP();
 					}
 				}
@@ -617,9 +619,13 @@ hci_unsol_event_handler(char *event_hdr)
 			break;
 		case HCI_EVNT_BSD_TCP_CLOSE_WAIT:
 			{
+				data = (char *)(event_hdr) + HCI_EVENT_HEADER_SIZE;
 				if( tSLInformation.sWlanCB )
 				{
-					tSLInformation.sWlanCB(event_type, NULL, 0);
+					//data[0] represents the socket id, for which FIN was received by remote.
+					//Upon receiving this event, the user can close the socket, or else the 
+					//socket will be closded after inacvitity timeout (by default 60 seconds)
+					tSLInformation.sWlanCB(event_type, data, 1);
 				}
 			}
 			break;
@@ -652,6 +658,12 @@ hci_unsol_event_handler(char *event_hdr)
                 }
                 else
                     return (0);
+	}
+	
+	//handle a case where unsolicited event arrived, but was not handled by any of the cases above
+	if ((event_type != tSLInformation.usRxEventOpcode) && (event_type != HCI_EVNT_PATCHES_REQ))
+	{
+		return(1);
 	}
 	
 	return(0);

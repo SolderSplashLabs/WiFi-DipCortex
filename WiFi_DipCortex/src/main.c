@@ -56,9 +56,11 @@
 #include "systemConfig.h"
 #include "wifi_app.h"
 #include "usbcdc.h"
-#include "SolderSplashUdp.h"
+#include "udpServer.h"
 #include "sntpClient.h"
-
+#include "timeManager.h"
+#include "dns.h"
+#include "buttonCon.h"
 
 #define _MAIN_
 #include "main.h"
@@ -116,15 +118,16 @@ void init(void)
 
 	Buttons_Init();
 
-	SntpInit();
-
 	// Start USB CDC Console
 	UsbCdcInit();
 
 	// Set up the System Tick for a 1ms interrupt
 	SysTick_Config(SYSTICK);
 
+	SntpInit();
+
 	Wifi_AppInit(0);
+	Wifi_StartAutoConnect();
 
 }
 
@@ -137,9 +140,6 @@ int main(void)
 {
  	init();
 
-	LPC_GPIO->DIR[0] |= 0x02;
-	LPC_GPIO->CLR[0] = 0x02;
-
 	while(1)
 	{
 		if ( sysTicked )
@@ -148,10 +148,11 @@ int main(void)
 
 			Buttons_Task(SYSTICKMS);
 			Wifi_Task();
+
 			Dns_Task();
 			SntpTask();
+			UdpServer_Task();
 			Console_Task();
-			SSUDP_Task();
 		}
   	}
 

@@ -559,13 +559,17 @@ wlan_ioctl_set_connection_policy(unsigned long should_connect_to_open_ap,
 //!  @param    ulSsidLen ssid length
 //!  @param    ucBssid   bssid  6 bytes
 //!  @param    ulPriority ulPriority profile priority. Lowest priority:0.
+//!			   Important Note: Smartconfig process (in unencrypted mode) 
+//!			   stores the profile internally with priority 1, so changing  
+//!			   priorities when adding new profiles should be done with extra care
 //!  @param    ulPairwiseCipher_Or_TxKeyLen  key length for WEP security
 //!  @param    ulGroupCipher_TxKeyIndex  key index
 //!  @param    ulKeyMgmt        KEY management 
 //!  @param    ucPf_OrKey       security key
 //!  @param    ulPassPhraseLen  security key length for WPA\WPA2
 //!
-//!  @return    On success, zero is returned. On error, -1 is returned        
+//!  @return    On success, index (1-7) of the stored profile is returned.         
+//!				On error, -1 is returned.
 //!
 //!  @brief     When auto start is enabled, the device connects to
 //!             station from the profiles table. Up to 7 profiles are supported. 

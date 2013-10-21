@@ -1,14 +1,15 @@
-#define MCU_LPC11U24	1
-#define MCU_LPC1347		2
+#define DIPCORTEX_M0		1
+#define DIPCORTEX_M3		2
+#define DIPCORTEX_WIFI		3
 
-#define MCU_TYPE 	MCU_LPC1347
+#define BOARD_TYPE 			DIPCORTEX_WIFI
 
 #ifdef __USE_CMSIS
-	#if MCU_TYPE == MCU_LPC1347
+	#if ( BOARD_TYPE == DIPCORTEX_WIFI ) || ( BOARD_TYPE == DIPCORTEX_M3 )
 
 	#include "LPC13Uxx.h"
 
-	#elif MCU_TYPE == MCU_LPC11U24
+	#elif MCU_TYPE == DIPCORTEX_M0
 
 	#include "LPC11Uxx.h"
 
@@ -17,6 +18,26 @@
 
 #include <NXP/crp.h>
 #include <cr_section_macros.h>
+
+
+// Do we want debug messages echo'd to the console
+#define DEBUG_USB_CONSOLE
+
+#ifdef DEBUG_USB_CONSOLE
+
+#ifndef DEBUG_PRINT
+// If you want debug info to go somewhere else just change it once here
+#define DEBUG_PRINT(x, ...) ConsoleInsertPrintf(x, ##__VA_ARGS__);
+#endif
+
+#else
+
+#ifndef DEBUG_PRINT
+// Remove debug statements
+#define DEBUG_PRINT(x, ...)
+#endif
+
+#endif
 
 // Gets a byte from a larger number
 #define BYTE_N(x,n) (((x) >> n*8) & 0x000000FF)

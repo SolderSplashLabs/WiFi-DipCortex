@@ -6,12 +6,14 @@ void SysConfig_Init ( void );
 void SysConfig_Save ( void );
 void SysConfig_Load ( void );
 void SysConfig_FactoryDefault ( void );
+void SysConfig_SetName ( char *newName, uint8_t len );
+void SysConfig_SetNtp  ( char *newNtp, uint8_t len );
 
 typedef struct
 {
-	uint8_t StaticIp:1;					// Use a Static IP
-	uint8_t NtpEnabled:1;				// Auto time/date update
 	uint8_t Spare:6;
+	uint8_t NtpEnabled:1;				// Auto time/date update
+	uint8_t StaticIp:1;					// Use a Static IP
 }
 SYSTEM_CONFIG_FLAGS;
 

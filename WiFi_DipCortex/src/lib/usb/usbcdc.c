@@ -259,7 +259,7 @@ ErrorCode_t VCOM_bulk_out_hdlr(USBD_HANDLE_T hUsb, void* data, uint32_t event)
   {
 	  pVcom->rxlen = pUsbApi->hw->ReadEP(hUsb, USB_CDC_EP_BULK_OUT, pVcom->rxBuf);
 
-	  UsbCdcRxFifo_AddBytes(pVcom->rxBuf, pVcom->rxlen );
+	  UsbCdcRxFifo_AddBytes((char *)pVcom->rxBuf, pVcom->rxlen );
 
 	  //CdcDataIn( pVcom->rxBuf, pVcom->rxlen );
   }

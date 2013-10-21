@@ -43,6 +43,7 @@
 
 	@section DESCRIPTION
 
+	fetches the time from an internet server
 	RFC5905 - Details the NTPv4 Protocol
 
 */
@@ -55,6 +56,7 @@
 #include "wifi_app.h"
 #include "timeManager.h"
 #include "console.h"
+#include "dnsCache.h"
 
 #define _SNTP_
 #include "sntpClient.h"
@@ -304,6 +306,9 @@ int32_t retval = 0;
 					SNTP_Buffer[15]  = 52;
 
 					// Send the request.
+					tSocketAddr.sa_data[0] = (SNTP_PORT >> 8);
+					tSocketAddr.sa_data[1] = (0x00ff & SNTP_PORT);
+
 					tSocketAddr.sa_data[2] = (char)((serverIp>>24) & 0xff);
 					tSocketAddr.sa_data[3] = (char)((serverIp>>16) & 0xff);
 					tSocketAddr.sa_data[4] = (char)((serverIp>>8) & 0xff);
